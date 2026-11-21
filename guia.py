@@ -12,7 +12,7 @@ from datetime import datetime
 M3U = "https://iptv-org.github.io/iptv/languages/spa.m3u"
 # Guías XMLTV gratuitas por país (si alguna falla, se salta).
 EPGS = [f"https://epgshare01.online/epgshare01/epg_ripper_{p}1.xml.gz"
-        for p in ["MX", "ES", "AR", "CO", "CL", "PE", "US_LOCALS", "DO", "UY", "EC", "VE", "CR"]]
+        for p in ["MX", "ES", "AR", "CO", "CL", "PE", "US_LOCALS", "DO", "UY", "EC", "CR"]]
 HORAS = 18          # cuántas horas hacia adelante guardar
 DESC = 110          # largo máximo de la descripción
 COREANO = re.compile(r"\b(core[ao]s?|coreanas?|dorama|doramas|k-?drama|k-?dramas|korean|seúl|seul)\b", re.I)
@@ -41,14 +41,45 @@ def country(i):
     return m.group(1).lower() if m else ""
 
 
-def keys_for(tvg_id, name):
-    out = []
+STOP = {"canal", "tv", "de", "del", "la", "el", "mexico", "hd", "sd", "fhd", "uhd", "4k",
+        "1080p", "720p", "480p", "360p", "channel", "television", "nacional"}
+SINON = {"azteca": "az", "once": "11"}
+
+
+def core(s):
+    """Nombre reducido a lo esencial: 'Canal.Azteca.Uno.mx' y 'AztecaUno' -> 'azuno'."""
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
+    s = re.sub(r"\(.*?\)|\[.*?\]", " ", s)
+    s = re.sub(r"(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Za-z])", " ", s)
+    toks = [SINON.get(t, t) for t in re.split(r"[^a-z0-9]+", s.lower()) if t and t not in STOP]
+    return "".join(toks)
+
+
+def id_sin_pais(i):
+    return re.sub(r"\.[a-z]{2}$", "", id_base(i), flags=re.I)
+
+
+def niveles(tvg_id, names):
+    """Claves de búsqueda, de la más segura a la más floja."""
+    cc = country(tvg_id)
+    out = [set(), set(), set(), set()]
     if tvg_id:
-        out.append("i:" + norm(id_base(tvg_id)))
-    n = clean_name(name)
-    if n:
-        out.append("n:" + n + "|" + country(tvg_id))
+        out[0].add("i:" + norm(id_base(tvg_id)))
+        c = core(id_sin_pais(tvg_id))
+        if c:
+            out[2].add("c:" + c + "|" + cc)
+    for n in names:
+        if clean_name(n):
+            out[1].add("n:" + clean_name(n) + "|" + cc)
+            out[3].add("n:" + clean_name(n) + "|")
+        if core(n):
+            out[2].add("c:" + core(n) + "|" + cc)
     return out
+
+
+def app_key(tvg_id, name):
+    """La clave que busca la app (index.html) para este canal."""
+    return "i:" + norm(id_base(tvg_id)) if tvg_id else "n:" + clean_name(name) + "|" + country(tvg_id)
 
 
 def get(url):
@@ -60,14 +91,13 @@ def get(url):
     return data
 
 
-def m3u_keys(text):
-    want = set()
+def m3u_canales(text):
+    out = []
     for line in text.splitlines():
         if line.startswith("#EXTINF"):
             attrs = dict(re.findall(r'([\w-]+)="([^"]*)"', line))
-            name = line.rsplit(",", 1)[-1].strip()
-            want.update(keys_for(attrs.get("tvg-id", ""), name))
-    return want
+            out.append((attrs.get("tvg-id", ""), line.rsplit(",", 1)[-1].strip()))
+    return list(dict.fromkeys(out))
 
 
 def ts(s):
@@ -81,24 +111,44 @@ def ts(s):
 def build(m3u_text, epg_blobs, now=None):
     now = int(now or time.time())
     lo, hi = now - 3 * 3600, now + HORAS * 3600
-    want = m3u_keys(m3u_text)
-    chans, keymap = [], {}
-    for blob in epg_blobs:
-        idx_of = {}
+    canales = m3u_canales(m3u_text)
+    # 1) Canales de las guías: sus claves por nivel (gana el primero que aparece).
+    epg = [{}, {}, {}, {}]
+    for bi, blob in enumerate(epg_blobs):
         for ev, el in ET.iterparse(io.BytesIO(blob), events=("end",)):
             if el.tag == "channel":
                 cid = el.get("id", "")
-                names = [d.text or "" for d in el.findall("display-name")]
-                ks = ["i:" + norm(id_base(cid))] + ["n:" + clean_name(n) + "|" + country(cid) for n in names]
-                hit = [k for k in ks if k in want and k not in keymap]
-                if hit:
-                    idx_of[cid] = len(chans)
-                    chans.append([])
-                    for k in hit:
-                        keymap[k] = idx_of[cid]
+                names = [d.text or "" for d in el.findall("display-name")] + [id_sin_pais(cid).replace(".", " ")]
+                for lv, ks in enumerate(niveles(cid, names)):
+                    if lv == 0:
+                        ks = {"i:" + norm(id_base(cid))}
+                    for k in ks:
+                        epg[lv].setdefault(k, (bi, cid))
                 el.clear()
             elif el.tag == "programme":
-                i = idx_of.get(el.get("channel", ""))
+                el.clear()
+    # 2) Cada canal de la lista se empareja con la clave más segura que coincida.
+    asign = {}
+    for tid, name in canales:
+        ak = app_key(tid, name)
+        if ak in asign:
+            continue
+        for lv, ks in enumerate(niveles(tid, [name])):
+            hit = next((epg[lv][k] for k in sorted(ks) if k in epg[lv]), None)
+            if hit:
+                asign[ak] = hit
+                break
+    # 3) Programación solo de los canales emparejados.
+    idx, chans = {}, []
+    for ref in asign.values():
+        if ref not in idx:
+            idx[ref] = len(chans)
+            chans.append([])
+    keymap = {k: idx[r] for k, r in asign.items()}
+    for bi, blob in enumerate(epg_blobs):
+        for ev, el in ET.iterparse(io.BytesIO(blob), events=("end",)):
+            if el.tag == "programme":
+                i = idx.get((bi, el.get("channel", "")))
                 if i is not None:
                     try:
                         a, b = ts(el.get("start", "")), ts(el.get("stop", ""))
@@ -112,6 +162,8 @@ def build(m3u_text, epg_blobs, now=None):
                         if len(d) > DESC:
                             d = d[:DESC - 1].rstrip() + "…"
                         chans[i].append([a, b, t, d, k])
+                el.clear()
+            elif el.tag == "channel":
                 el.clear()
     for p in chans:
         p.sort(key=lambda x: x[0])

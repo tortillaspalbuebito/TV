@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1114">
+<title>Tele Libre</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: directa, de control remoto; IDEA: una tele de bolsillo
+   PICTURE: el reproductor arriba, grande; COLOUR: tinta oscura + rojo "en vivo"
+   TYPE: Archivo; LAYOUT: reproductor, guía, pestañas, cuadrícula de canales */
+:root{color-scheme:light dark;--bg:light-dark(#f4f4f2,#0f1114);--card:light-dark(#fff,#1a1d22);--soft:light-dark(#eceeea,#23272e);--ink:light-dark(#121417,#eef0f2);--mute:light-dark(#5d636b,#9aa1aa);--line:light-dark(#e2e3e0,#2a2e35);--red:#ff3b30;--k:light-dark(#7a3cff,#a98bff)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;overflow-x:clip}
+header{display:flex;align-items:center;gap:10px;padding:14px max(4vw,14px) 8px;flex-wrap:wrap}
+h1{font-size:26px;margin:0;line-height:1.05;font-weight:800}
+h2{font-size:18px;margin:18px 0 8px}
+.live{background:var(--red);color:#fff;font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
+.kidsb{background:#16a34a;color:#fff;font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 max(4vw,14px) 40px}
+.player{background:#000;border-radius:14px;overflow:hidden;position:relative;aspect-ratio:16/9;touch-action:pan-y}
+video,.player canvas{width:100%;height:100%;display:block;background:#000}
+.msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;text-align:center;padding:20px;background:rgba(0,0,0,.75)}
+.osd{position:absolute;left:12px;top:12px;max-width:75%;background:rgba(0,0,0,.7);color:#fff;padding:8px 12px;border-radius:10px;pointer-events:none;opacity:0;transition:opacity .3s}
+.osd.on{opacity:1}.osd b{display:block;font-size:17px}.osd span{font-size:13px;color:#ffb3ae}
+.fsb{position:absolute;right:8px;top:8px;width:44px;height:44px;border-radius:10px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;cursor:pointer}
+.now{display:flex;align-items:center;gap:8px;padding:10px 0;flex-wrap:wrap}
+.now b{font-size:18px;flex:1}
+button,select,input{font:inherit;font-size:16px;color:var(--ink)}
+.btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink)}
+.btn.red{background:var(--red);color:#fff;border-color:var(--red);font-weight:600}
+.btn.sm{min-height:36px;padding:0 12px;font-size:14px}
+:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.tabs,.chips,.rec{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tabs{margin:14px 0 12px}
+.tab,.chip{flex:none;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-weight:600}
+.chip{min-height:38px;font-size:14px;font-weight:400}
+.tab[aria-selected=true]{background:var(--ink);color:var(--bg)}
+.chip[aria-pressed=true]{background:var(--red);color:#fff;border-color:var(--red)}
+.rec .chip{font-weight:600}
+.lbl{color:var(--mute);font-size:13px;margin:6px 0 6px}
+.filters{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin:10px 0}
+.filters input,.filters select,.cfg input,.cfg select{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--card);padding:0 12px;width:100%}
+.count{color:var(--mute);font-size:14px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.ch{display:flex;align-items:center;gap:10px;padding:10px 10px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);cursor:pointer;min-height:66px;position:relative}
+.ch.on{box-shadow:0 0 0 2px var(--red) inset}
+.ch.mal{opacity:.55}
+.ch img,.ch .ph{width:40px;height:40px;object-fit:contain;flex:none;border-radius:8px;background:var(--soft)}
+.ch .ph{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--mute)}
+.ch .txt{display:block;flex:1;overflow:hidden;padding-right:18px;font-size:14px;line-height:1.25}
+.ch .txt>span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ch em{display:block;font-style:normal;font-size:12px;color:var(--red);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ch small{display:block;color:var(--mute);font-size:12px}
+.ch i{position:absolute;left:10px;right:10px;bottom:6px;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+.ch i b{display:block;height:100%;background:var(--red)}
+.star{position:absolute;top:2px;right:2px;font-size:16px;color:var(--mute);background:none;border:0;cursor:pointer;width:32px;height:32px}
+.star.y{color:#f5b301}
+.kt{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:var(--k);border-radius:5px;padding:0 6px;margin-left:4px;vertical-align:1px}
+.epg{display:grid;gap:6px}
+.epg>div{display:grid;grid-template-columns:5.8em minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
+.epg>div.ya{border-color:var(--red)}
+.epg time{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.epg p{margin:0}.epg small{color:var(--mute);display:block;font-size:13px}
+.aviso{position:sticky;top:0;z-index:40;background:var(--red);color:#fff;padding:10px max(4vw,14px);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.aviso b{flex:1}.aviso .btn{background:#fff;color:#111;border:0}
+.gg{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--card);max-height:70vh;position:relative}
+.gg .row{display:flex;border-bottom:1px solid var(--line);min-height:56px}
+.gg .nm{position:sticky;left:0;z-index:2;flex:none;width:108px;padding:8px 10px;background:var(--card);border-right:1px solid var(--line);font-size:13px;font-weight:600;line-height:1.2;cursor:pointer;display:flex;align-items:center}
+.gg .trk{position:relative;flex:none}
+.gg .pg{position:absolute;top:4px;bottom:4px;border-radius:8px;background:var(--soft);padding:4px 8px;font-size:13px;line-height:1.2;overflow:hidden;cursor:pointer;border:0;text-align:left;color:var(--ink)}
+.gg .pg.ya{background:light-dark(#ffe2df,#3a1f1d)}.gg .pg.k{box-shadow:inset 3px 0 0 var(--k)}
+.gg .pg small{display:block;color:var(--mute);font-size:11px}
+.gg .hd{position:sticky;top:0;z-index:3;background:var(--card);min-height:32px}
+.gg .hd .nm{z-index:4}
+.gg .hd span{position:absolute;top:7px;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.gg .ln{position:absolute;top:0;bottom:0;margin-left:-1px;width:2px;background:var(--red);z-index:1;pointer-events:none}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h3{margin:0 0 4px;font-size:18px}.card p{margin:0 0 12px;color:var(--mute);font-size:15px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:6px;background:var(--soft);color:var(--mute);margin-bottom:8px}
+.cfg{display:grid;gap:10px;max-width:640px}
+.cfg section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px}
+.cfg h3{margin:0;font-size:17px}
+.sw{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
+.sw input{width:22px;height:22px;min-height:0;accent-color:var(--red)}
+.note{color:var(--mute);font-size:14px;margin:0}
+.dlg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.dlg>div{background:var(--card);width:min(560px,100%);border-radius:18px 18px 0 0;padding:20px max(4vw,16px) 28px;display:grid;gap:12px}
+.dlg h3{margin:0;font-size:20px;line-height:1.2}.dlg .row2{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}
+@media(max-width:600px){.filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.filters input{grid-column:1/-1}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.player{border-radius:0;margin:0 calc(-1*max(4vw,14px))}}
+/* Celular acostado: el video ocupa toda la pantalla */
+@media(orientation:landscape) and (max-height:520px){body.playing .player{position:fixed;inset:0;z-index:50;border-radius:0;margin:0;aspect-ratio:auto}body.playing{overflow:hidden}}
+.player:fullscreen{border-radius:0;aspect-ratio:auto}
+@media(prefers-reduced-motion:reduce){.osd{transition:none}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+</head>
+<body>
+<div class="aviso" id="aviso" hidden><b id="avisoTxt"></b><button class="btn sm" id="avisoVer">Ver ahora</button><button class="btn sm" id="avisoX" aria-label="Cerrar aviso">✕</button></div>
+<header><h1>Tele Libre</h1><span class="live">EN VIVO</span><span class="kidsb" id="kidsBadge" hidden>MODO NIÑOS</span><span style="flex:1"></span><button class="btn sm" id="instalar" hidden>Instalar app</button></header>
+<div class="wrap">
+  <div class="player" id="pw">
+    <video id="v" controls playsinline></video>
+    <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
+    <button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button>
+    <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
+  </div>
+  <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
+  <div class="epg" id="epg"></div>
+
+  <div id="recBox" hidden><p class="lbl">Vistos recientemente</p><div class="rec" id="rec"></div></div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-t="vivo" aria-selected="true">Canales</button>
+    <button class="tab" role="tab" data-t="guia" aria-selected="false">Guía</button>
+    <button class="tab" role="tab" data-t="kdrama" aria-selected="false" data-adult>K-dramas</button>
+    <button class="tab" role="tab" data-t="mx" aria-selected="false" data-adult>TV abierta MX</button>
+    <button class="tab" role="tab" data-t="cfg" aria-selected="false">Ajustes</button>
+  </div>
+
+  <section id="p-vivo">
+    <div class="chips" id="quick"></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Buscar canal o programa…" aria-label="Buscar canal o programa">
+      <select id="pais" aria-label="País"></select>
+      <select id="cat" aria-label="Categoría"></select>
+    </div>
+    <div class="chips" style="margin-bottom:10px"><button class="chip" id="soloGuia" aria-pressed="false">Solo con programación</button></div>
+    <p class="count" id="count">Cargando canales…</p>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="p-guia" hidden>
+    <p class="note" style="margin-bottom:10px">Usa los filtros de la pestaña Canales para elegir qué canales ver aquí. Toca un programa para verlo o para que te avise.</p>
+    <div class="gg" id="gg"></div>
+  </section>
+
+  <section id="p-kdrama" hidden>
+    <h2>En la guía de hoy</h2>
+    <div class="epg" id="kguia"></div>
+    <h2>Plataformas gratis</h2>
+    <div class="cards" id="kd"></div>
+  </section>
+
+  <section id="p-mx" hidden>
+    <p class="note" style="margin-bottom:10px">Páginas oficiales de las televisoras. Algunas piden iniciar sesión o abren su propia app.</p>
+    <div class="cards" id="mx"></div>
+  </section>
+
+  <section id="p-cfg" hidden><div class="cfg">
+    <section id="cfgKids">
+      <h3>Modo niños</h3>
+      <p class="note" id="kidsNote"></p>
+      <input id="pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="PIN de 4 números" aria-label="PIN">
+      <button class="btn red" id="kidsBtn"></button>
+      <p class="note" id="kidsMsg" role="status"></p>
+    </section>
+    <section data-adult>
+      <h3>Recordatorios</h3>
+      <div class="epg" id="remList"></div>
+    </section>
+    <section data-adult>
+      <h3>Canales</h3>
+      <label class="sw"><input type="checkbox" id="verCaidos"> Mostrar también los canales caídos</label>
+      <p class="note" id="caidosInfo"></p>
+      <label for="m3u"><b>Lista de canales (M3U)</b></label>
+      <input id="m3u" type="url" inputmode="url">
+      <div class="row2" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn red" id="saveList">Usar esta lista</button>
+        <button class="btn" id="resetList">Volver a la lista en español</button>
+        <label class="btn">Cargar archivo .m3u<input id="file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl" hidden></label>
+      </div>
+      <p class="note">La lista por defecto es la de canales en español de iptv-org, que solo reúne señales que los propios canales publican gratis.</p>
+    </section>
+  </div></section>
+</div>
+
+<div class="dlg" id="dlg" hidden><div role="dialog" aria-modal="true" aria-labelledby="dlgT"><h3 id="dlgT"></h3><div id="dlgB"></div><div class="row2" id="dlgA"></div></div></div>
+
+<script>
+{
+const DEMO=window.TL_DEMO||null;
+const APP=!!window.TL_APP; // true dentro del APK
+const LN=window.Capacitor?.Plugins?.LocalNotifications||null;
+const DEF='https://iptv-org.github.io/iptv/languages/spa.m3u';
+const PAISES={mx:'México',ar:'Argentina',es:'España',co:'Colombia',cl:'Chile',pe:'Perú',ve:'Venezuela',us:'Estados Unidos',ec:'Ecuador',gt:'Guatemala',cr:'Costa Rica',pa:'Panamá',do:'Rep. Dominicana',uy:'Uruguay',py:'Paraguay',bo:'Bolivia',hn:'Honduras',sv:'El Salvador',ni:'Nicaragua',cu:'Cuba',pr:'Puerto Rico',kr:'Corea'};
+const CATS={general:'General',news:'Noticias',entertainment:'Entretenimiento',movies:'Películas',series:'Series y novelas',sports:'Deportes',kids:'Infantil',music:'Música',documentary:'Documentales',religious:'Religión',lifestyle:'Estilo de vida',cooking:'Cocina',culture:'Cultura',education:'Educación',comedy:'Comedia',classic:'Clásicos',family:'Familia',animation:'Animación',business:'Negocios',travel:'Viajes',science:'Ciencia',outdoor:'Aire libre',shop:'Compras',weather:'Clima',legislative:'Legislativo',public:'Público',relax:'Relajación',auto:'Autos',undefined:'Otros'};
+const QUICK=[['','Todo'],['news','Noticias'],['series','Novelas y series'],['movies','Películas'],['sports','Deportes'],['kids','Infantil'],['music','Música']];
+const KIDS=new Set(['kids','animation','family','education']);
+const BLOQ=/xxx|adult/i;
+const KD=[
+ {n:'Rakuten Viki',t:'Subtítulos en español',d:'Miles de K-dramas en coreano con subtítulos hechos por fans. Gratis con anuncios.',u:'https://www.viki.com'},
+ {n:'ViX · K-dramas Channel',t:'En español',d:'Canal gratuito de ViX dedicado a series coreanas.',u:'https://vix.com'},
+ {n:'Pluto TV',t:'Doblados al español',d:'Canales en vivo con producciones coreanas, la mayoría dobladas.',u:'https://pluto.tv'},
+ {n:'KBS World en YouTube',t:'Subtítulos',d:'Canal oficial de la televisora coreana con episodios gratis subtitulados.',u:'https://www.youtube.com/results?search_query=KBS+World+drama+sub+espa%C3%B1ol'},
+ {n:'Imagen TV',t:'Audio latino',d:'Transmite doramas coreanos doblados en su programación abierta.',u:'https://www.imagentv.com'}
+];
+const MX=[
+ {n:'TV Azteca',t:'Azteca Uno · Azteca 7 · ADN 40',d:'Señal en vivo gratis en su sitio oficial.',u:'https://www.tvazteca.com'},
+ {n:'Televisa · N+ / Las Estrellas',t:'Puede pedir cuenta',d:'Las Estrellas en vivo puede requerir cuenta de izzi o Blim.',u:'https://www.nmas.com.mx'},
+ {n:'ViX gratis',t:'Televisa-Univisión',d:'Canales y series gratis de Televisa y Univisión.',u:'https://vix.com'},
+ {n:'Imagen Televisión',t:'Canal 3.1',d:'Noticias, series y entretenimiento.',u:'https://www.imagentv.com'},
+ {n:'Canal Once',t:'Público',d:'Televisión pública del IPN.',u:'https://canalonce.mx'},
+ {n:'Canal 22',t:'Público',d:'Cultura y documentales.',u:'https://www.canal22.org.mx'},
+ {n:'TV UNAM',t:'Público',d:'Televisión de la UNAM.',u:'https://tv.unam.mx'},
+ {n:'Pluto TV',t:'Cientos de canales',d:'Canales en vivo gratis, muchos en español.',u:'https://pluto.tv'},
+ {n:'Samsung TV Plus',t:'Gratis',d:'Canales en vivo gratis en teles y celulares Samsung.',u:'https://www.samsungtvplus.com'}
+];
+const $=id=>document.getElementById(id);
+const v=$('v'),grid=$('grid');
+const ls={get(k,d){try{const x=localStorage.getItem(k);return x==null?d:JSON.parse(x)}catch(e){return d}},set(k,x){try{localStorage.setItem(k,JSON.stringify(x))}catch(e){}}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const enc=encodeURIComponent;
+const now=()=>Date.now()/1000;
+const hora=s=>new Date(s*1000).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'});
+
+let all=[],view=[],curCh=null,hls=null,G=null,solo=false,saltos=0,skipT=0,osdT=0;
+let favs=new Set(ls.get('favs',[])),recent=ls.get('recent',[]),rems=ls.get('rems',[]),failed=ls.get('failed',{});
+let verCaidos=ls.get('verCaidos',false),kids=ls.get('kids',false),pinSaved=ls.get('pin','');
+let dead=new Set();
+
+/* ---------- Lista M3U ---------- */
+function parse(txt){
+  const out=[];let meta=null;
+  for(const raw of txt.split(/\r?\n/)){const l=raw.trim();if(!l)continue;
+    if(l.startsWith('#EXTINF')){const a={};l.replace(/([\w-]+)="([^"]*)"/g,(m,k,x)=>{a[k]=x});
+      meta={name:l.slice(l.lastIndexOf(',')+1).trim()||a['tvg-name']||'Canal',logo:a['tvg-logo']||'',grp:a['group-title']||'Undefined',id:a['tvg-id']||''};}
+    else if(!l.startsWith('#')&&meta){meta.pais=cc(meta.id);meta.url=l;meta.cats=meta.grp.split(';').map(c=>c.trim().toLowerCase()).filter(Boolean);
+      if(!BLOQ.test(meta.grp)&&!BLOQ.test(meta.name)&&!(location.protocol==='https:'&&!APP&&l.startsWith('http:')))out.push(meta);meta=null;}
+  }
+  return out;
+}
+async function load(){
+  if(DEMO){setList(DEMO.channels);return}
+  const src=ls.get('src',DEF);$('m3u').value=src;$('count').textContent='Cargando canales…';
+  const own=ls.get('custom',null);if(own){setList(parse(own));return}
+  try{const r=await fetch(src);if(!r.ok)throw 0;const t=await r.text();setList(parse(t));try{localStorage.setItem('lastList',t)}catch(e){}}
+  catch(e){try{const t=localStorage.getItem('lastList');if(t){setList(parse(t));return}}catch(e2){}
+    $('count').textContent='No se pudo cargar la lista. Revisa tu conexión o cambia la lista en Ajustes.';}
+}
+function setList(list){
+  all=list.sort((a,b)=>(b.pais==='mx')-(a.pais==='mx')||a.name.localeCompare(b.name,'es'));
+  const ps=[...new Set(all.map(c=>c.pais))].sort((a,b)=>(PAISES[a]||a||'zz').localeCompare(PAISES[b]||b||'zz','es'));
+  $('pais').innerHTML='<option value="">Todos los países</option><option value="*fav">★ Favoritos</option>'+ps.map(p=>`<option value="${esc(p)}">${esc(PAISES[p]||p.toUpperCase()||'Otro')}</option>`).join('');
+  const cs=[...new Set(all.flatMap(c=>c.cats))].sort((a,b)=>(CATS[a]||a).localeCompare(CATS[b]||b,'es'));
+  $('cat').innerHTML='<option value="">Todas las categorías</option>'+cs.map(c=>`<option value="${esc(c)}">${esc(CATS[c]||c)}</option>`).join('');
+  $('pais').value=ls.get('pais','');if($('pais').selectedIndex<0)$('pais').value='';
+  render();renderRecent();
+  const last=all.find(c=>c.url===ls.get('last',''));
+  if(last&&okKids(last))playCh(last,true);
+}
+
+/* ---------- Guía (guia.json generado por GitHub Actions) ---------- */
+const norm=s=>(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const cleanName=s=>norm((s||'').replace(/\(.*?\)|\[.*?\]/g,' ').replace(/\b(hd|sd|fhd|uhd|4k)\b/gi,' '));
+const idBase=i=>(i||'').split('@')[0];
+function cc(i){const m=idBase(i).match(/\.([a-z]{2})$/i);return m?m[1].toLowerCase():''}
+function progs(ch){
+  if(!G)return null;
+  if(ch._g===undefined){ch._g=null;
+    for(const k of [ch.id&&'i:'+norm(idBase(ch.id)),'n:'+cleanName(ch.name)+'|'+cc(ch.id)])if(k&&G.k[k]!==undefined){ch._g=G.c[G.k[k]];break}}
+  return ch._g;
+}
+function ahora(ch){const p=progs(ch);if(!p)return null;const t=now();const i=p.findIndex(x=>x[0]<=t&&x[1]>t);return i<0?null:{p,i,t,e:p[i]}}
+async function loadGuia(){
+  if(DEMO){G=DEMO.guide}
+  else try{const r=await fetch(window.TL_GUIA||'guia.json',{cache:'no-cache'});if(!r.ok)throw 0;G=await r.json()}catch(e){G=null}
+  all.forEach(c=>delete c._g);dead=new Set(G?.x||[]);
+  $('caidosInfo').textContent=G?`La última revisión encontró ${dead.size} ${dead.size===1?'señal caída':'señales caídas'}${verCaidos?'; se muestran al final':(dead.size===1?' y la escondió':' y las escondió')}. Se revisan cada 4 horas.`:'Todavía no hay revisión de canales (se genera en GitHub).';
+  render();showEpg();renderKGuia();
+}
+const korean=e=>e&&e[4]===1;
+const kTag=e=>korean(e)?'<span class="kt">Coreano</span>':'';
+
+/* ---------- Filtros ---------- */
+function okKids(x){return !kids||x.cats.some(c=>KIDS.has(c))}
+function malo(x){return dead.has(x.url)||(failed[x.url]&&Date.now()-failed[x.url]<864e5)}
+function render(){
+  const q=$('q').value.trim().toLowerCase(),p=$('pais').value,c=$('cat').value;ls.set('pais',p);
+  document.querySelectorAll('#quick .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===c));
+  view=all.filter(x=>{
+    if(!okKids(x))return false;
+    if(!verCaidos&&dead.has(x.url))return false;
+    if(p&&(p==='*fav'?!favs.has(x.url):x.pais!==p))return false;
+    if(c&&!x.cats.includes(c))return false;
+    const a=ahora(x);if(solo&&!a)return false;
+    return !q||x.name.toLowerCase().includes(q)||(a&&a.e[2].toLowerCase().includes(q));
+  });
+  view.sort((a,b)=>malo(a)-malo(b));
+  $('count').textContent=view.length?`${view.length} ${view.length===1?'canal':'canales'}`:(p==='*fav'?'Aún no tienes favoritos: toca la estrella de un canal.':'No hay canales con ese filtro.');
+  grid.innerHTML=view.slice(0,400).map((x,i)=>`<div class="ch${x===curCh?' on':''}${malo(x)?' mal':''}" role="button" tabindex="0" data-i="${i}">${x.logo?`<img src="${esc(x.logo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'${esc((x.name[0]||'?').replace(/['\\]/g,''))}'}))">`:`<div class="ph">${esc(x.name[0]||'?')}</div>`}${tile(x)}<button class="star${favs.has(x.url)?' y':''}" data-f="${i}" aria-label="Favorito">★</button></div>`).join('');
+  if(!$('p-guia').hidden)renderGrid();
+}
+function tile(x){
+  const a=ahora(x);let sub,bar='';
+  if(a){sub=`<em>${esc(a.e[2])}</em>`;bar=`<i><b style="width:${Math.round((a.t-a.e[0])/(a.e[1]-a.e[0])*100)}%"></b></i>`}
+  else sub=`<small>${malo(x)?'No cargó la última vez':esc(PAISES[x.pais]||x.pais.toUpperCase())}</small>`;
+  return `<span class="txt"><span>${esc(x.name)}${a&&korean(a.e)?'<span class="kt">K</span>':''}</span>${sub}</span>${bar}`;
+}
+
+/* ---------- Reproductor ---------- */
+function msg(t,next){$('msg').hidden=!t;$('msgTxt').textContent=t||'';$('nextBtn').hidden=!next;}
+function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.name:'';$('osdP').textContent=a?a.e[2]:'';
+  $('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),3500)}
+function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
+function playCh(ch,auto){
+  if(!ch)return;curCh=ch;clearTimeout(skipT);
+  $('nowName').textContent=ch.name;document.body.classList.add('playing');render();showEpg();osd();
+  if(hls){hls.destroy();hls=null}
+  const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);ls.set('last',ch.url);
+    recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
+    if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
+  const fail=()=>{failed[ch.url]=Date.now();ls.set('failed',failed);
+    if(!auto&&saltos<5){saltos++;msg('Este canal no está disponible. Pasando al siguiente…');skipT=setTimeout(()=>{if(curCh===ch)step(1)},2500)}
+    else{saltos=0;msg('Este canal no está disponible ahora.',true)}};
+  if(DEMO){msg('');DEMO.show(ch,ahora);ok();return}
+  msg('Conectando…');
+  const u=ch.url;
+  if(window.Hls&&Hls.isSupported()&&/m3u8/i.test(u)){
+    hls=new Hls({manifestLoadingMaxRetry:1});hls.loadSource(u);hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED,ok);hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
+  }else{v.src=u;v.onloadedmetadata=ok;v.onerror=()=>{if(curCh===ch)fail()};v.load();}
+  if(!auto)$('pw').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function showEpg(){
+  const box=$('epg');const a=curCh&&ahora(curCh);
+  if(!curCh||!a){box.innerHTML=curCh&&progs(curCh)?'<div><time>—</time><p>Sin datos para esta hora</p></div>':'';return}
+  box.innerHTML=a.p.slice(a.i,a.i+4).map((x,j)=>`<div class="${j?'':'ya'}"><time>${j?hora(x[0]):'Ahora'}</time><p>${esc(x[2])}${kTag(x)}<small>${j?'':hora(x[0])+' – '+hora(x[1])+(x[3]?' · ':'')}${esc(x[3]||'')}</small></p>${j?remBtn(curCh,x):''}</div>`).join('');
+}
+const remKey=(ch,e)=>ch.url+'|'+e[0];
+function remBtn(ch,e){const on=rems.some(r=>r.k===remKey(ch,e));return `<button class="btn sm" data-rem="${esc(remKey(ch,e))}" ${on?'aria-pressed="true"':''}>${on?'⏰ Listo':'⏰ Avisar'}</button>`}
+
+/* ---------- Recientes ---------- */
+function renderRecent(){
+  const list=recent.map(u=>all.find(c=>c.url===u)).filter(c=>c&&okKids(c));
+  $('recBox').hidden=!list.length;
+  $('rec').innerHTML=list.map(c=>`<button class="chip" data-u="${esc(c.url)}">${esc(c.name)}</button>`).join('');
+}
+
+/* ---------- Guía en cuadrícula ---------- */
+const PPM=3.2;
+function renderGrid(){
+  const rows=view.filter(x=>progs(x)).slice(0,80);
+  if(!rows.length){$('gg').innerHTML=`<p class="note" style="padding:16px">${G?'Ningún canal de este filtro tiene programación.':'La guía aparece cuando GitHub genere guia.json.'}</p>`;return}
+  const t=now(),st=Math.floor(t/1800)*1800,en=st+6*3600,W=(en-st)/60*PPM,x=s=>(Math.max(s,st)-st)/60*PPM;
+  let h=`<div class="row hd"><div class="nm">Canal</div><div class="trk" style="width:${W}px">`;
+  for(let s=st;s<en;s+=1800)h+=`<span style="left:${x(s)+6}px">${hora(s)}</span>`;
+  h+='</div></div>';
+  rows.forEach(c=>{const ri=view.indexOf(c);
+    h+=`<div class="row"><div class="nm" data-i="${ri}">${esc(c.name)}</div><div class="trk" style="width:${W}px">`;
+    progs(c).forEach((e,k)=>{if(e[1]<=st||e[0]>=en)return;const l=x(e[0]),w=x(e[1])-l;
+      h+=`<button class="pg${e[0]<=t&&e[1]>t?' ya':''}${korean(e)?' k':''}" style="left:${l+2}px;width:${Math.max(w-4,8)}px" data-g="${ri}:${k}">${w>40?esc(e[2]):''}${w>90?`<small>${hora(e[0])}</small>`:''}</button>`});
+    h+=`<div class="ln" style="left:${x(t)}px"></div></div></div>`});
+  const keep=$('gg').scrollLeft;$('gg').innerHTML=h;$('gg').scrollLeft=keep;
+}
+function progSheet(ch,e){
+  const live=e[0]<=now()&&e[1]>now();
+  sheet(`${esc(e[2])}${kTag(e)}`,`<p class="note">${esc(ch.name)} · ${hora(e[0])} – ${hora(e[1])}</p>${e[3]?`<p>${esc(e[3])}</p>`:''}`,
+    [live?['Ver ahora',()=>playCh(ch),'red']:['⏰ Avisarme',()=>addRem(ch,e),'red'],['Ver el canal',()=>playCh(ch)],['Cerrar']]);
+}
+
+/* ---------- K-dramas en la guía ---------- */
+function renderKGuia(){
+  const t=now(),items=[];
+  all.forEach(c=>{if(!okKids(c)||(!verCaidos&&dead.has(c.url)))return;(progs(c)||[]).forEach(e=>{if(korean(e)&&e[1]>t)items.push([c,e])})});
+  items.sort((a,b)=>a[1][0]-b[1][0]);
+  $('kguia').innerHTML=items.length?items.slice(0,30).map(([c,e])=>{const live=e[0]<=t;
+    return `<div class="${live?'ya':''}"><time>${live?'Ahora':hora(e[0])}</time><p>${esc(e[2])}<small>${esc(c.name)}</small></p>${live?`<button class="btn sm red" data-u="${esc(c.url)}">Ver</button>`:remBtn(c,e)}</div>`}).join('')
+    :`<p class="note">${G?'Ahora no hay doramas en la guía de los canales. Prueba las plataformas de abajo.':'Aparecerán aquí cuando GitHub genere la guía.'}</p>`;
+}
+
+/* ---------- Recordatorios ---------- */
+const gcal=s=>new Date(s*1000).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+function findRem(k){const [u,s]=[k.slice(0,k.lastIndexOf('|')),+k.slice(k.lastIndexOf('|')+1)];const c=all.find(x=>x.url===u);const e=c&&(progs(c)||[]).find(x=>x[0]===s);return [c,e]}
+function addRem(ch,e){
+  const k=remKey(ch,e);
+  if(!rems.some(r=>r.k===k)){rems.push({k,u:ch.url,n:ch.name,t:e[2],s:e[0],f:e[1]});ls.set('rems',rems)}
+  if(LN){LN.requestPermissions().then(()=>LN.schedule({notifications:[{id:nid(k),title:e[2],body:`${ch.name} · empieza a las ${hora(e[0])}`,schedule:{at:new Date(Math.max(e[0]-120,now()+5)*1000),allowWhileIdle:true}}]})).catch(()=>{})}
+  else try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(x){}
+  const cal=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(e[2]+' · '+ch.name)}&dates=${gcal(e[0])}/${gcal(e[1])}&details=${enc(APP?'Ver en la app Tele Libre':'Ver en Tele Libre: '+location.href.split('#')[0])}`;
+  sheet('Te aviso cuando empiece',`<p class="note">“${esc(e[2])}” en ${esc(ch.name)} a las ${hora(e[0]).replace(/\.$/,'')}. ${LN?'Te llegará una notificación 2 minutos antes, aunque cierres la app.':'El aviso llega 2 minutos antes mientras la app esté abierta. Para que te avise aunque la cierres, agrégalo también a tu calendario.'}</p>`,
+    LN?[['Listo',0,'red'],['También en Google Calendar',cal]]:[['Agregar a Google Calendar',cal,'red'],['Listo']]);
+  showEpg();renderKGuia();renderRems();
+}
+const nid=k=>{let h=7;for(const c of k)h=(h*31+c.charCodeAt(0))|0;return (Math.abs(h)%2000000000)||1};
+function delRem(k){LN?.cancel({notifications:[{id:nid(k)}]}).catch(()=>{});rems=rems.filter(r=>r.k!==k);ls.set('rems',rems);showEpg();renderKGuia();renderRems()}
+function renderRems(){
+  $('remList').innerHTML=rems.length?rems.sort((a,b)=>a.s-b.s).map(r=>`<div><time>${hora(r.s)}</time><p>${esc(r.t)}<small>${esc(r.n)}</small></p><button class="btn sm" data-del="${esc(r.k)}">Quitar</button></div>`).join(''):'<p class="note">No tienes recordatorios. Toca ⏰ Avisar en un programa.</p>';
+}
+let avisoU='';
+function checkRems(){
+  const t=now();let ch=false;
+  rems.forEach(r=>{if(!r.done&&r.s-120<=t&&r.f>t){r.done=1;ch=true;avisoU=r.u;
+    $('avisoTxt').textContent=`${r.s>t?'Ya va a empezar':'Ya empezó'}: ${r.t} en ${r.n}`;$('aviso').hidden=false;
+    try{navigator.vibrate?.([200,100,200])}catch(x){}
+    try{if(!LN&&'Notification' in window&&Notification.permission==='granted'){const o={body:`${r.n} · ${hora(r.s)}`,icon:'icon-192.png',tag:r.k};
+      navigator.serviceWorker?.getRegistration().then(g=>g?g.showNotification(r.t,o):new Notification(r.t,o)).catch(()=>{})}}catch(x){}}});
+  const n=rems.length;rems=rems.filter(r=>r.f>t);if(ch||n!==rems.length){ls.set('rems',rems);renderRems()}
+}
+
+/* ---------- Ventana inferior ---------- */
+function sheet(title,body,actions){
+  $('dlgT').innerHTML=title;$('dlgB').innerHTML=body;
+  $('dlgA').innerHTML=actions.map((a,i)=>typeof a[1]==='string'?`<a class="btn ${a[2]||''}" href="${esc(a[1])}" target="_blank" rel="noopener" data-a="${i}">${esc(a[0])}</a>`:`<button class="btn ${a[2]||''}" data-a="${i}">${esc(a[0])}</button>`).join('');
+  $('dlgA').onclick=ev=>{const b=ev.target.closest('[data-a]');if(!b)return;const f=actions[+b.dataset.a][1];$('dlg').hidden=true;if(typeof f==='function')f()};
+  $('dlg').hidden=false;$('dlgA').querySelector('[data-a]')?.focus();
+}
+$('dlg').addEventListener('click',e=>{if(e.target===$('dlg'))$('dlg').hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('dlg').hidden=true});
+
+/* ---------- Modo niños ---------- */
+function applyKids(){
+  $('kidsBadge').hidden=!kids;
+  document.querySelectorAll('[data-adult]').forEach(el=>el.hidden=kids);
+  $('kidsNote').textContent=kids?'Solo se muestran canales infantiles y familiares. Escribe el PIN para salir.':(pinSaved?'Escribe tu PIN para activarlo.':'Elige un PIN de 4 números. Con él se activa y se desactiva.');
+  $('kidsBtn').textContent=kids?'Salir del modo niños':'Activar modo niños';
+  if(kids&&['kdrama','mx'].includes(document.querySelector('.tab[aria-selected=true]').dataset.t))tabTo('vivo');
+  render();renderRecent();renderKGuia();
+}
+$('kidsBtn').onclick=()=>{
+  const p=$('pin').value.trim();$('kidsMsg').textContent='';
+  if(!/^\d{4}$/.test(p)){$('kidsMsg').textContent='El PIN debe tener 4 números.';return}
+  if(!pinSaved){pinSaved=p;ls.set('pin',p)}
+  if(p!==pinSaved){$('kidsMsg').textContent='PIN incorrecto.';return}
+  kids=!kids;ls.set('kids',kids);$('pin').value='';
+  if(kids&&curCh&&!okKids(curCh)){if(hls){hls.destroy();hls=null}v.removeAttribute('src');curCh=null;$('nowName').textContent='Sin canal';msg('Elige un canal para empezar');showEpg()}
+  applyKids();
+};
+
+/* ---------- Pestañas y eventos ---------- */
+function tabTo(t){
+  document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
+  ['vivo','guia','kdrama','mx','cfg'].forEach(p=>$('p-'+p).hidden=p!==t);
+  if(t==='guia'){renderGrid();const g=$('gg');requestAnimationFrame(()=>{g.scrollLeft=0})}
+  if(t==='kdrama')renderKGuia();
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>tabTo(t.dataset.t));
+$('quick').innerHTML=QUICK.map(([c,n])=>`<button class="chip" data-c="${c}" aria-pressed="false">${n}</button>`).join('');
+$('quick').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;$('cat').value=b.dataset.c;if($('cat').selectedIndex<0)$('cat').value='';render()};
+grid.addEventListener('click',e=>{
+  const f=e.target.closest('[data-f]');
+  if(f){e.stopPropagation();const x=view[+f.dataset.f];favs.has(x.url)?favs.delete(x.url):favs.add(x.url);ls.set('favs',[...favs]);render();return}
+  const c=e.target.closest('[data-i]');if(c)playCh(view[+c.dataset.i]);
+});
+grid.addEventListener('keydown',e=>{if(e.key==='Enter'){const c=e.target.closest('[data-i]');if(c)playCh(view[+c.dataset.i])}});
+$('gg').addEventListener('click',e=>{
+  const n=e.target.closest('.nm[data-i]');if(n){playCh(view[+n.dataset.i]);return}
+  const g=e.target.closest('[data-g]');if(!g)return;const [i,k]=g.dataset.g.split(':').map(Number);const c=view[i];progSheet(c,progs(c)[k]);
+});
+document.addEventListener('click',e=>{
+  const r=e.target.closest('[data-rem]');if(r){const k=r.dataset.rem;if(rems.some(x=>x.k===k))delRem(k);else{const [c,ev]=findRem(k);if(c&&ev)addRem(c,ev)}return}
+  const d=e.target.closest('[data-del]');if(d){delRem(d.dataset.del);return}
+  const u=e.target.closest('#rec [data-u],#kguia [data-u]');if(u){playCh(all.find(c=>c.url===u.dataset.u))}
+});
+$('next').onclick=()=>step(1);$('prev').onclick=()=>step(-1);$('nextBtn').onclick=()=>step(1);
+['q','pais','cat'].forEach(id=>$(id).addEventListener('input',render));
+$('soloGuia').onclick=e=>{solo=!solo;e.currentTarget.setAttribute('aria-pressed',solo);render()};
+$('verCaidos').checked=verCaidos;$('verCaidos').onchange=e=>{verCaidos=e.target.checked;ls.set('verCaidos',verCaidos);loadGuia()};
+$('avisoX').onclick=()=>$('aviso').hidden=true;
+$('avisoVer').onclick=()=>{$('aviso').hidden=true;playCh(all.find(c=>c.url===avisoU))};
+const cards=arr=>arr.map(x=>`<div class="card"><span class="tag">${esc(x.t)}</span><h3>${esc(x.n)}</h3><p>${esc(x.d)}</p><a class="btn red" href="${esc(x.u)}" target="_blank" rel="noopener">Abrir</a></div>`).join('');
+$('kd').innerHTML=cards(KD);$('mx').innerHTML=cards(MX);
+$('saveList').onclick=()=>{const u=$('m3u').value.trim();if(!u)return;ls.set('src',u);ls.set('custom',null);load().then(loadGuia)};
+$('resetList').onclick=()=>{ls.set('src',DEF);ls.set('custom',null);load().then(loadGuia)};
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();ls.set('custom',t);setList(parse(t));loadGuia();tabTo('vivo')};
+
+/* ---------- Control remoto: deslizar, teclas, pantalla completa ---------- */
+let tx=0,ty=0;
+$('pw').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
+$('pw').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5)step(dx<0?1:-1)},{passive:true});
+document.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowRight'||e.key==='PageUp')step(1);if(e.key==='ArrowLeft'||e.key==='PageDown')step(-1)});
+async function full(){try{await $('pw').requestFullscreen();await screen.orientation?.lock?.('landscape')}catch(e){}}
+$('fs').onclick=()=>document.fullscreenElement?document.exitFullscreen().catch(()=>{}):full();
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)try{screen.orientation?.unlock?.()}catch(e){}});
+const mq=matchMedia('(orientation:landscape) and (max-height:520px)');
+mq.addEventListener?.('change',m=>{if(m.matches&&curCh&&!document.fullscreenElement)full();if(m.matches)osd()});
+
+/* ---------- App instalable ---------- */
+let instEv=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;$('instalar').hidden=false});
+$('instalar').onclick=async()=>{if(!instEv)return;instEv.prompt();await instEv.userChoice.catch(()=>{});instEv=null;$('instalar').hidden=true};
+if(!DEMO&&!APP&&'serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+setInterval(()=>{render();showEpg();checkRems()},30000);
+renderRems();applyKids();
+load().then(loadGuia).then(checkRems);
+}
+</script>
+</body>
+</html>

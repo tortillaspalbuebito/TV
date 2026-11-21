@@ -1,0 +1,15 @@
+{
+  "appId": "com.telelibre.app",
+  "appName": "Tele Libre",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0f1114"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_tv",
+      "iconColor": "#ff3b30"
+    }
+  }
+}

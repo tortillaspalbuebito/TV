@@ -19,6 +19,23 @@ COREANO = re.compile(r"\b(core[ao]s?|coreanas?|dorama|doramas|k-?drama|k-?dramas
 # Respuestas que significan "probablemente bloqueado por país", no "caído":
 # GitHub corre en EE. UU., así que esos canales NO se esconden.
 GEO = {401, 403, 451}
+DB = "https://raw.githubusercontent.com/iptv-org/database/master/data/"
+# Ciudades y estados que, si aparecen en el nombre de un canal mexicano, lo ubican.
+LUGARES = {
+    "monterrey": "NLE", "nuevo leon": "NLE", "guadalajara": "JAL", "jalisco": "JAL", "tijuana": "BCN",
+    "mexicali": "BCN", "ensenada": "BCN", "baja california sur": "BCS", "los cabos": "BCS", "cancun": "ROO",
+    "chetumal": "ROO", "quintana roo": "ROO", "merida": "YUC", "yucatan": "YUC", "puebla": "PUE",
+    "queretaro": "QUE", "toluca": "MEX", "mexiquense": "MEX", "edomex": "MEX", "acapulco": "GRO",
+    "chilpancingo": "GRO", "oaxaca": "OAX", "veracruz": "VER", "xalapa": "VER", "jalapa": "VER",
+    "villahermosa": "TAB", "tabasco": "TAB", "tuxtla": "CHP", "chiapas": "CHP", "hermosillo": "SON",
+    "sonora": "SON", "culiacan": "SIN", "mazatlan": "SIN", "sinaloa": "SIN", "durango": "DUR",
+    "torreon": "COA", "saltillo": "COA", "coahuila": "COA", "chihuahua": "CHH", "cd juarez": "CHH",
+    "ciudad juarez": "CHH", "reynosa": "TAM", "nuevo laredo": "TAM", "matamoros": "TAM", "tampico": "TAM",
+    "tamaulipas": "TAM", "san luis potosi": "SLP", "zacatecas": "ZAC", "aguascalientes": "AGU",
+    "morelia": "MIC", "michoacan": "MIC", "cuernavaca": "MOR", "pachuca": "HID", "tlaxcala": "TLA",
+    "tepic": "NAY", "nayarit": "NAY", "colima": "COL", "campeche": "CAM", "guanajuato": "GUA",
+    "irapuato": "GUA", "celaya": "GUA", "cdmx": "CMX", "ciudad de mexico": "CMX",
+}
 
 
 def norm(s):
@@ -170,6 +187,40 @@ def build(m3u_text, epg_blobs, now=None):
     return {"u": now, "k": keymap, "c": chans}
 
 
+def palabras(s):
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    return " " + " ".join(re.split(r"[^a-z0-9]+", s)).strip() + " "
+
+
+def estados(m3u_text):
+    """Estado de México de cada canal local: {clave de la app: 'JAL'}."""
+    import csv
+    area = {}
+    try:
+        cities = {c["code"]: c["subdivision"] for c in csv.DictReader(io.StringIO(get(DB + "cities.csv").decode()))}
+        for f in csv.DictReader(io.StringIO(get(DB + "feeds.csv").decode())):
+            if not f["channel"].lower().endswith(".mx"):
+                continue
+            for a in f["broadcast_area"].split(";"):
+                sub = a[2:] if a.startswith("s/") else cities.get(a[3:]) if a.startswith("ct/") else None
+                if sub and sub.startswith("MX-"):
+                    area[f["channel"] + "@" + f["id"]] = sub[3:]
+                    break
+    except Exception as e:
+        print("sin base de canales", e)
+    out = {}
+    for tid, name in m3u_canales(m3u_text):
+        if country(tid) != "mx":
+            continue
+        code = area.get(tid)
+        if not code:
+            w = palabras(name + " " + id_sin_pais(tid).replace(".", " "))
+            code = next((c for l, c in LUGARES.items() if f" {l} " in w), None)
+        if code:
+            out[app_key(tid, name)] = code
+    return out
+
+
 def stream_urls(text):
     return [l.strip() for l in text.splitlines() if l.strip() and not l.startswith("#")]
 
@@ -207,10 +258,11 @@ def main():
     g = build(m3u, blobs)
     urls = stream_urls(m3u)
     g["x"] = caidos(urls)
+    g["e"] = estados(m3u)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(g, f, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(g['c'])} canales con guía, {len(g['k'])} claves, "
-          f"{len(g['x'])} de {len(urls)} señales caídas -> {out}")
+          f"{len(g['x'])} de {len(urls)} señales caídas, {len(g['e'])} canales locales -> {out}")
 
 
 if __name__ == "__main__":

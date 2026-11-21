@@ -62,6 +62,14 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 .ch i b{display:block;height:100%;background:var(--red)}
 .star{position:absolute;top:2px;right:2px;font-size:16px;color:var(--mute);background:none;border:0;cursor:pointer;width:32px;height:32px}
 .star.y{color:#f5b301}
+.num{display:inline-block;min-width:2.2em;font-size:11px;font-weight:800;color:var(--mute);font-variant-numeric:tabular-nums;margin-right:4px}
+.lt{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:#0a8f5a;border-radius:5px;padding:0 6px;margin-left:4px;vertical-align:1px}
+.pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pad button{min-height:56px;font-size:24px;font-weight:800;border-radius:12px;border:1px solid var(--line);background:var(--soft);cursor:pointer}
+.padv{font-size:40px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;min-height:52px;color:var(--red)}
+.qopt{display:grid;gap:8px}.qopt button{min-height:52px;text-align:left;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:16px}
+.qopt button[aria-pressed=true]{border-color:var(--red);box-shadow:0 0 0 2px var(--red) inset;font-weight:800}
+.osd .big{font-size:42px;font-weight:800;line-height:1}
 .kt{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:var(--k);border-radius:5px;padding:0 6px;margin-left:4px;vertical-align:1px}
 .epg{display:grid;gap:6px}
 .epg>div{display:grid;grid-template-columns:5.8em minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
@@ -99,21 +107,24 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 /* Celular acostado: el video ocupa toda la pantalla */
 @media(orientation:landscape) and (max-height:520px){body.playing .player{position:fixed;inset:0;z-index:50;border-radius:0;margin:0;aspect-ratio:auto}body.playing{overflow:hidden}}
 .player:fullscreen{border-radius:0;aspect-ratio:auto}
+body.fs{overflow:hidden}body.fs .player{position:fixed;inset:0;z-index:50;border-radius:0;margin:0;aspect-ratio:auto}
+video{object-fit:contain}
 @media(prefers-reduced-motion:reduce){.osd{transition:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 </head>
 <body>
+<div class="aviso" id="upd" hidden style="background:#0a8f5a"><b id="updTxt"></b><button class="btn sm" id="updSi">Actualizar</button><button class="btn sm" id="updNo" aria-label="Después">Después</button></div>
 <div class="aviso" id="aviso" hidden><b id="avisoTxt"></b><button class="btn sm" id="avisoVer">Ver ahora</button><button class="btn sm" id="avisoX" aria-label="Cerrar aviso">✕</button></div>
 <header><h1>Tele Libre</h1><span class="live">EN VIVO</span><span class="kidsb" id="kidsBadge" hidden>MODO NIÑOS</span><span style="flex:1"></span><button class="btn sm" id="instalar" hidden>Instalar app</button></header>
 <div class="wrap">
   <div class="player" id="pw">
-    <video id="v" controls playsinline></video>
+    <video id="v" controls playsinline controlslist="nofullscreen"></video>
     <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
-    <button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button>
+    <button class="fsb" id="calidad" style="right:58px;width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button>
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
-  <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
+  <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
   <div class="epg" id="epg"></div>
 
   <div id="recBox" hidden><p class="lbl">Vistos recientemente</p><div class="rec" id="rec"></div></div>
@@ -133,7 +144,7 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
       <select id="pais" aria-label="País"></select>
       <select id="cat" aria-label="Categoría"></select>
     </div>
-    <div class="chips" style="margin-bottom:10px"><button class="chip" id="soloGuia" aria-pressed="false">Solo con programación</button></div>
+    <div class="chips" style="margin-bottom:10px"><button class="chip" id="soloGuia" aria-pressed="false">Solo con programación</button><button class="chip" id="soloLocal" aria-pressed="false" hidden></button></div>
     <p class="count" id="count">Cargando canales…</p>
     <div class="grid" id="grid"></div>
   </section>
@@ -163,13 +174,26 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
       <button class="btn red" id="kidsBtn"></button>
       <p class="note" id="kidsMsg" role="status"></p>
     </section>
+    <section>
+      <h3>Mi estado</h3>
+      <p class="note">Los canales locales de tu estado salen primero y con la etiqueta <span class="lt">Local</span>.</p>
+      <select id="estado" aria-label="Mi estado"></select>
+      <button class="btn" id="detectar">📍 Detectar con mi ubicación</button>
+      <p class="note" id="estadoMsg" role="status"></p>
+    </section>
     <section data-adult>
       <h3>Recordatorios</h3>
       <div class="epg" id="remList"></div>
     </section>
+    <section id="verBox" hidden>
+      <h3>Actualizaciones</h3>
+      <p class="note" id="verTxt"></p>
+      <button class="btn" id="verBtn">Buscar actualización</button>
+    </section>
     <section data-adult>
       <h3>Canales</h3>
       <label class="sw"><input type="checkbox" id="verCaidos"> Mostrar también los canales caídos</label>
+      <label class="sw" id="nativoBox" hidden><input type="checkbox" id="nativo"> Usar siempre el reproductor de Android</label>
       <p class="note" id="caidosInfo"></p>
       <label for="m3u"><b>Lista de canales (M3U)</b></label>
       <input id="m3u" type="url" inputmode="url">
@@ -190,10 +214,19 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 const DEMO=window.TL_DEMO||null;
 const APP=!!window.TL_APP; // true dentro del APK
 const LN=window.Capacitor?.Plugins?.LocalNotifications||null;
+const PANT=window.Capacitor?.Plugins?.Pantalla||null,AppP=window.Capacitor?.Plugins?.App||null;
 const DEF='https://iptv-org.github.io/iptv/languages/spa.m3u';
 const PAISES={mx:'México',ar:'Argentina',es:'España',co:'Colombia',cl:'Chile',pe:'Perú',ve:'Venezuela',us:'Estados Unidos',ec:'Ecuador',gt:'Guatemala',cr:'Costa Rica',pa:'Panamá',do:'Rep. Dominicana',uy:'Uruguay',py:'Paraguay',bo:'Bolivia',hn:'Honduras',sv:'El Salvador',ni:'Nicaragua',cu:'Cuba',pr:'Puerto Rico',kr:'Corea'};
 const CATS={general:'General',news:'Noticias',entertainment:'Entretenimiento',movies:'Películas',series:'Series y novelas',sports:'Deportes',kids:'Infantil',music:'Música',documentary:'Documentales',religious:'Religión',lifestyle:'Estilo de vida',cooking:'Cocina',culture:'Cultura',education:'Educación',comedy:'Comedia',classic:'Clásicos',family:'Familia',animation:'Animación',business:'Negocios',travel:'Viajes',science:'Ciencia',outdoor:'Aire libre',shop:'Compras',weather:'Clima',legislative:'Legislativo',public:'Público',relax:'Relajación',auto:'Autos',undefined:'Otros'};
 const QUICK=[['','Todo'],['news','Noticias'],['series','Novelas y series'],['movies','Películas'],['sports','Deportes'],['kids','Infantil'],['music','Música']];
+// Cadenas que en México normalmente son de paga: no se muestran.
+const PAGO=['golden','skysport','foxsport','cinemax','warnerchannel','warnertv','universaltv','universalchannel','studiouniversal','disneychannel','disneyjunior','disneyxd','nickelodeon','nickjr','cartoonnetwork','cartoonito','tooncast','discovery','nationalgeographic','natgeo','history','lifetime','sonychannel','sonymovies','comedycentral','paramountnetwork','starchannel','cinecanal','syfy','telehit','bandamax','tlnovelas','distritocomedia','depelicula','unicable','cinelatino','ritmoson','movistar','laligatv','eurosport','tycsports','winsports','directvsports','nbatv','nflnetwork','mlbnetwork','babytv','dreamworks','foodnetwork','hgtv','animalplanet','filmandarts','europaeuropa','trutv','telemundointernacional','nickmusic','clarosports','clarocinema','tntsports','espn'];
+const PAGO_CORTO=/^(amc|cnn|mtv|vh1|tnt|tbs|tcm|hbo|axn|bein|dazn|espn|tudn|isat|fx|dsports)\d*$/;
+// Señales de servicios gratis y legales (Pluto TV, Samsung TV Plus, etc.): nunca se esconden.
+const GRATIS=/jmp2\.uk|pluto\.tv|amagi\.tv|frequency\.stream|wurl|samsung|plex\.tv|tubi|roku|xumo|stirr|vix\.com|rakuten|lgchannels/i;
+const NUM_MX={aztecauno:'1.1',adn40:'1.2',lasestrellas:'2.1',imagentelevision:'3.1',imagentv:'3.1',excelsiortv:'3.4',forotv:'4.1',nmasforo:'4.1',canal5:'5.1',multimedios:'6.1',multimediostelevision:'6.1',mileniotelevision:'6.2',mileniotv:'6.2',mvstv:'6.4',azteca7:'7.1',amas:'7.2',laoctava:'8.1',heraldotv:'10.1',heraldotelevision:'10.1',canalonce:'11.1',canal14:'14.1',tvunam:'20.1',canal22:'22.1',canal22nacional:'22.1',mexiquensetv:'34.1'};
+const ESTADOS=[['AGU','Aguascalientes',21.88,-102.29],['BCN','Baja California',30.84,-115.28],['BCS','Baja California Sur',26.04,-111.67],['CAM','Campeche',19.83,-90.53],['CHP','Chiapas',16.75,-93.12],['CHH','Chihuahua',28.63,-106.07],['CMX','Ciudad de México',19.43,-99.13],['COA','Coahuila',27.06,-101.71],['COL','Colima',19.24,-103.72],['DUR','Durango',24.02,-104.65],['MEX','Estado de México',19.29,-99.65],['GUA','Guanajuato',21.02,-101.26],['GRO','Guerrero',17.44,-99.55],['HID','Hidalgo',20.09,-98.76],['JAL','Jalisco',20.66,-103.35],['MIC','Michoacán',19.57,-101.71],['MOR','Morelos',18.68,-99.10],['NAY','Nayarit',21.75,-104.85],['NLE','Nuevo León',25.59,-99.99],['OAX','Oaxaca',17.07,-96.73],['PUE','Puebla',19.04,-98.21],['QUE','Querétaro',20.59,-100.39],['ROO','Quintana Roo',19.18,-88.48],['SLP','San Luis Potosí',22.16,-100.98],['SIN','Sinaloa',25.17,-107.48],['SON','Sonora',29.30,-110.33],['TAB','Tabasco',17.84,-92.62],['TAM','Tamaulipas',24.27,-98.84],['TLA','Tlaxcala',19.32,-98.24],['VER','Veracruz',19.17,-96.13],['YUC','Yucatán',20.71,-89.09],['ZAC','Zacatecas',22.77,-102.58]];
+const CALIDAD={auto:'Automática (según tu internet)',alta:'Alta (la mejor imagen)',media:'Media (hasta 480p)',baja:'Ahorro de datos (la más baja)'};
 const KIDS=new Set(['kids','animation','family','education']);
 const BLOQ=/xxx|adult/i;
 const KD=[
@@ -205,7 +238,7 @@ const KD=[
 ];
 const MX=[
  {n:'TV Azteca',t:'Azteca Uno · Azteca 7 · ADN 40',d:'Señal en vivo gratis en su sitio oficial.',u:'https://www.tvazteca.com'},
- {n:'Televisa · N+ / Las Estrellas',t:'Puede pedir cuenta',d:'Las Estrellas en vivo puede requerir cuenta de izzi o Blim.',u:'https://www.nmas.com.mx'},
+ {n:'Televisa · Canal 5, Las Estrellas, Nueve',t:'Gratis por antena',d:'Son gratis con antena. En vivo por internet solo están en ViX Premium (de paga). N+ Foro tiene noticias en su sitio.',u:'https://www.nmas.com.mx'},
  {n:'ViX gratis',t:'Televisa-Univisión',d:'Canales y series gratis de Televisa y Univisión.',u:'https://vix.com'},
  {n:'Imagen Televisión',t:'Canal 3.1',d:'Noticias, series y entretenimiento.',u:'https://www.imagentv.com'},
  {n:'Canal Once',t:'Público',d:'Televisión pública del IPN.',u:'https://canalonce.mx'},
@@ -225,7 +258,7 @@ const hora=s=>new Date(s*1000).toLocaleTimeString('es-MX',{hour:'numeric',minute
 let all=[],view=[],curCh=null,hls=null,G=null,solo=false,saltos=0,skipT=0,osdT=0;
 let favs=new Set(ls.get('favs',[])),recent=ls.get('recent',[]),rems=ls.get('rems',[]),failed=ls.get('failed',{});
 let verCaidos=ls.get('verCaidos',false),kids=ls.get('kids',false),pinSaved=ls.get('pin','');
-let dead=new Set();
+let dead=new Set(),pagados=0,noOficiales=0,siempreNativo=ls.get('nativo',false),probadoNativo=new Set(),miEstado=ls.get('estado',''),soloLocal=false,calidad=ls.get('calidad','auto');
 
 /* ---------- Lista M3U ---------- */
 function parse(txt){
@@ -246,13 +279,39 @@ async function load(){
   catch(e){try{const t=localStorage.getItem('lastList');if(t){setList(parse(t));return}}catch(e2){}
     $('count').textContent='No se pudo cargar la lista. Revisa tu conexión o cambia la lista en Ajustes.';}
 }
+const palabrasDe=x=>((x.name||'').replace(/\(.*?\)|\[.*?\]/g,' ')+' '+idBase(x.id).replace(/\.[a-z]{2}$/i,'').replace(/(?<=[a-z])(?=[A-Z0-9])/g,' ')).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+// Cadenas nacionales cuyas únicas señales en la lista vienen de servidores ajenos (retransmisiones).
+const REDES=/^(canal5|lasestrellas|aztecauno|azteca7|nueve|canal9|forotv|nmas|nmasforo|imagentelevision|imagentv|adn40|azmundo|azcorazon|azcinema|aztecainternacional|multimedios|excelsiortv|mileniotelevision|heraldotv|amas)$/;
+const esRetrans=x=>x.pais==='mx'&&REDES.test(norm(idBase(x.id).replace(/\.mx$/i,'')))&&/^https?:\/\/\d+\.\d+\.\d+\.\d+/.test(x.url||'');
+const LEGAL={'2.1':'Las Estrellas','4.1':'N+ Foro','5.1':'Canal 5','9.1':'Nueve','1.1':'Azteca Uno','7.1':'Azteca 7'};
+function comoVerLegal(n){
+  const azteca=n==='1.1'||n==='7.1';
+  sheet(`Cómo ver ${LEGAL[n]} (${n})`,`<p class="note">No hay una señal oficial gratis de ${LEGAL[n]} que esta app pueda reproducir. Las que circulan en listas son retransmisiones de terceros, por eso no aparecen.</p><p><b>Gratis:</b> con antena de TV abierta, en el canal ${n}.</p><p><b>Por internet:</b> ${azteca?'TV Azteca transmite en vivo gratis en su sitio oficial y en su app.':'en vivo solo con ViX Premium (de paga). En su canal oficial de YouTube hay programas y clips gratis.'}</p>`,
+    [[azteca?'Abrir TV Azteca':'Abrir ViX',azteca?'https://www.tvazteca.com':'https://vix.com','red'],['Cerrar']]);
+}
+function esPago(x){
+  if(GRATIS.test(x.url||'')||/ by /i.test(x.name))return false;
+  const w=palabrasDe(x);if(w.some(t=>PAGO_CORTO.test(t)))return true;
+  const s=norm((x.name||'').replace(/\(.*?\)|\[.*?\]/g,' '))+' '+norm(idBase(x.id));
+  return PAGO.some(p=>s.includes(p));
+}
+const ident=x=>x.id?norm(idBase(x.id)):cleanName(x.name)+'|'+x.pais;
+function numerar(){
+  const usados=new Set();let n=100;
+  all.forEach(c=>{const k=c.pais==='mx'&&NUM_MX[norm(idBase(c.id).replace(/\.mx$/i,''))];c.num=k||'';if(k)usados.add(k)});
+  const ids=[...new Set(all.filter(c=>!c.num).map(ident))],map={};
+  ids.forEach(k=>{map[k]=String(n++)});all.forEach(c=>{if(!c.num)c.num=map[ident(c)]});
+}
 function setList(list){
+  const antes=list.length;list=list.filter(x=>!esPago(x));pagados=antes-list.length;
+  const antes2=list.length;list=list.filter(x=>!esRetrans(x));noOficiales=antes2-list.length;
   all=list.sort((a,b)=>(b.pais==='mx')-(a.pais==='mx')||a.name.localeCompare(b.name,'es'));
   const ps=[...new Set(all.map(c=>c.pais))].sort((a,b)=>(PAISES[a]||a||'zz').localeCompare(PAISES[b]||b||'zz','es'));
   $('pais').innerHTML='<option value="">Todos los países</option><option value="*fav">★ Favoritos</option>'+ps.map(p=>`<option value="${esc(p)}">${esc(PAISES[p]||p.toUpperCase()||'Otro')}</option>`).join('');
   const cs=[...new Set(all.flatMap(c=>c.cats))].sort((a,b)=>(CATS[a]||a).localeCompare(CATS[b]||b,'es'));
   $('cat').innerHTML='<option value="">Todas las categorías</option>'+cs.map(c=>`<option value="${esc(c)}">${esc(CATS[c]||c)}</option>`).join('');
   $('pais').value=ls.get('pais','');if($('pais').selectedIndex<0)$('pais').value='';
+  numerar();
   render();renderRecent();
   const last=all.find(c=>c.url===ls.get('last',''));
   if(last&&okKids(last))playCh(last,true);
@@ -269,12 +328,15 @@ function progs(ch){
     for(const k of [ch.id&&'i:'+norm(idBase(ch.id)),'n:'+cleanName(ch.name)+'|'+cc(ch.id)])if(k&&G.k[k]!==undefined){ch._g=G.c[G.k[k]];break}}
   return ch._g;
 }
+const appKey=ch=>ch.id?'i:'+norm(idBase(ch.id)):'n:'+cleanName(ch.name)+'|'+cc(ch.id);
+const local=ch=>!!(miEstado&&G?.e&&G.e[appKey(ch)]===miEstado);
 function ahora(ch){const p=progs(ch);if(!p)return null;const t=now();const i=p.findIndex(x=>x[0]<=t&&x[1]>t);return i<0?null:{p,i,t,e:p[i]}}
 async function loadGuia(){
   if(DEMO){G=DEMO.guide}
   else try{const r=await fetch(window.TL_GUIA||'guia.json',{cache:'no-cache'});if(!r.ok)throw 0;G=await r.json()}catch(e){G=null}
   all.forEach(c=>delete c._g);dead=new Set(G?.x||[]);
-  $('caidosInfo').textContent=G?`La última revisión encontró ${dead.size} ${dead.size===1?'señal caída':'señales caídas'}${verCaidos?'; se muestran al final':(dead.size===1?' y la escondió':' y las escondió')}. Se revisan cada 4 horas.`:'Todavía no hay revisión de canales (se genera en GitHub).';
+  $('caidosInfo').textContent=(G?`La última revisión encontró ${dead.size} ${dead.size===1?'señal caída':'señales caídas'}${verCaidos?'; se muestran al final':(dead.size===1?' y la escondió':' y las escondió')}. Se revisan cada 4 horas.`:'Todavía no hay revisión de canales (se genera en GitHub).')+(pagados?` Además se ${pagados===1?'esconde 1 señal de un canal que normalmente es':`esconden ${pagados} señales de canales que normalmente son`} de paga.`:'')+(noOficiales?` También se ${noOficiales===1?'esconde 1 retransmisión no oficial':`esconden ${noOficiales} retransmisiones no oficiales`} de cadenas nacionales (Canal 5, Azteca, etc.).`:'');
+  pintaEstado();
   render();showEpg();renderKGuia();
 }
 const korean=e=>e&&e[4]===1;
@@ -291,10 +353,11 @@ function render(){
     if(!verCaidos&&dead.has(x.url))return false;
     if(p&&(p==='*fav'?!favs.has(x.url):x.pais!==p))return false;
     if(c&&!x.cats.includes(c))return false;
+    if(soloLocal&&!local(x))return false;
     const a=ahora(x);if(solo&&!a)return false;
     return !q||x.name.toLowerCase().includes(q)||(a&&a.e[2].toLowerCase().includes(q));
   });
-  view.sort((a,b)=>malo(a)-malo(b));
+  view.sort((a,b)=>malo(a)-malo(b)||local(b)-local(a));
   $('count').textContent=view.length?`${view.length} ${view.length===1?'canal':'canales'}`:(p==='*fav'?'Aún no tienes favoritos: toca la estrella de un canal.':'No hay canales con ese filtro.');
   grid.innerHTML=view.slice(0,400).map((x,i)=>`<div class="ch${x===curCh?' on':''}${malo(x)?' mal':''}" role="button" tabindex="0" data-i="${i}">${x.logo?`<img src="${esc(x.logo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'${esc((x.name[0]||'?').replace(/['\\]/g,''))}'}))">`:`<div class="ph">${esc(x.name[0]||'?')}</div>`}${tile(x)}<button class="star${favs.has(x.url)?' y':''}" data-f="${i}" aria-label="Favorito">★</button></div>`).join('');
   if(!$('p-guia').hidden)renderGrid();
@@ -303,7 +366,7 @@ function tile(x){
   const a=ahora(x);let sub,bar='';
   if(a){sub=`<em>${esc(a.e[2])}</em>`;bar=`<i><b style="width:${Math.round((a.t-a.e[0])/(a.e[1]-a.e[0])*100)}%"></b></i>`}
   else sub=`<small>${malo(x)?'No cargó la última vez':esc(PAISES[x.pais]||x.pais.toUpperCase())}</small>`;
-  return `<span class="txt"><span>${esc(x.name)}${a&&korean(a.e)?'<span class="kt">K</span>':''}</span>${sub}</span>${bar}`;
+  return `<span class="txt"><span><span class="num">${esc(x.num||'')}</span>${esc(x.name)}${local(x)?'<span class="lt">Local</span>':''}${a&&korean(a.e)?'<span class="kt">K</span>':''}</span>${sub}</span>${bar}`;
 }
 
 /* ---------- Reproductor ---------- */
@@ -313,12 +376,17 @@ function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.nam
 function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
 function playCh(ch,auto){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
-  $('nowName').textContent=ch.name;document.body.classList.add('playing');render();showEpg();osd();
+  $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();
   if(hls){hls.destroy();hls=null}
   const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);ls.set('last',ch.url);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
-  const fail=()=>{failed[ch.url]=Date.now();ls.set('failed',failed);
+  const nativo=()=>{probadoNativo.add(ch.url);PANT.reproducir({url:ch.url,titulo:(ch.num?ch.num+'  ':'')+ch.name}).catch(()=>{});
+    msg('Abierto en el reproductor de Android. Si tampoco carga, prueba otro canal.',true);ls.set('last',ch.url);
+    recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent()};
+  if(PANT?.reproducir&&siempreNativo&&!auto&&!DEMO){if(hls){hls.destroy();hls=null}nativo();return}
+  const fail=()=>{if(PANT?.reproducir&&!auto&&!probadoNativo.has(ch.url)){if(hls){hls.destroy();hls=null}nativo();return}
+    failed[ch.url]=Date.now();ls.set('failed',failed);
     if(!auto&&saltos<5){saltos++;msg('Este canal no está disponible. Pasando al siguiente…');skipT=setTimeout(()=>{if(curCh===ch)step(1)},2500)}
     else{saltos=0;msg('Este canal no está disponible ahora.',true)}};
   if(DEMO){msg('');DEMO.show(ch,ahora);ok();return}
@@ -326,7 +394,7 @@ function playCh(ch,auto){
   const u=ch.url;
   if(window.Hls&&Hls.isSupported()&&/m3u8/i.test(u)){
     hls=new Hls({manifestLoadingMaxRetry:1});hls.loadSource(u);hls.attachMedia(v);
-    hls.on(Hls.Events.MANIFEST_PARSED,ok);hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{aplicaCalidad();ok()});hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
   }else{v.src=u;v.onloadedmetadata=ok;v.onerror=()=>{if(curCh===ch)fail()};v.load();}
   if(!auto)$('pw').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -463,6 +531,7 @@ document.addEventListener('click',e=>{
 $('next').onclick=()=>step(1);$('prev').onclick=()=>step(-1);$('nextBtn').onclick=()=>step(1);
 ['q','pais','cat'].forEach(id=>$(id).addEventListener('input',render));
 $('soloGuia').onclick=e=>{solo=!solo;e.currentTarget.setAttribute('aria-pressed',solo);render()};
+if(PANT?.reproducir){$('nativoBox').hidden=false;$('nativo').checked=siempreNativo;$('nativo').onchange=e=>{siempreNativo=e.target.checked;ls.set('nativo',siempreNativo)}}
 $('verCaidos').checked=verCaidos;$('verCaidos').onchange=e=>{verCaidos=e.target.checked;ls.set('verCaidos',verCaidos);loadGuia()};
 $('avisoX').onclick=()=>$('aviso').hidden=true;
 $('avisoVer').onclick=()=>{$('aviso').hidden=true;playCh(all.find(c=>c.url===avisoU))};
@@ -476,12 +545,27 @@ $('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=awai
 let tx=0,ty=0;
 $('pw').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
 $('pw').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5)step(dx<0?1:-1)},{passive:true});
-document.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowRight'||e.key==='PageUp')step(1);if(e.key==='ArrowLeft'||e.key==='PageDown')step(-1)});
-async function full(){try{await $('pw').requestFullscreen();await screen.orientation?.lock?.('landscape')}catch(e){}}
-$('fs').onclick=()=>document.fullscreenElement?document.exitFullscreen().catch(()=>{}):full();
-document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)try{screen.orientation?.unlock?.()}catch(e){}});
-const mq=matchMedia('(orientation:landscape) and (max-height:520px)');
-mq.addEventListener?.('change',m=>{if(m.matches&&curCh&&!document.fullscreenElement)full();if(m.matches)osd()});
+document.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowRight'||e.key==='PageUp')step(1);if(e.key==='ArrowLeft'||e.key==='PageDown')step(-1);if(/^[0-9.]$/.test(e.key)&&$('dlg').hidden)marca(e.key)});
+// En el APK, el complemento "Pantalla" esconde las barras de Android y gira la pantalla.
+let enFS=false,porGiro=false;
+function entrarFS(girar){
+  if(enFS)return;enFS=true;porGiro=!girar;document.body.classList.add('fs');$('fs').textContent='✕';$('fs').setAttribute('aria-label','Salir de pantalla completa');
+  if(PANT)PANT.completa({girar}).catch(()=>{});
+  else $('pw').requestFullscreen?.().then(()=>girar&&screen.orientation?.lock?.('landscape')).catch(()=>{});
+  osd();
+}
+function salirFS(){
+  if(!enFS)return;enFS=false;porGiro=false;document.body.classList.remove('fs');$('fs').textContent='⛶';$('fs').setAttribute('aria-label','Pantalla completa');
+  if(PANT)PANT.normal().catch(()=>{});
+  else{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});try{screen.orientation?.unlock?.()}catch(e){}}
+}
+$('fs').onclick=()=>enFS?salirFS():entrarFS(true);
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&enFS&&!PANT)salirFS()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')salirFS()});
+const mq=matchMedia('(orientation:landscape)');
+mq.addEventListener?.('change',m=>{if(m.matches&&curCh)entrarFS(false);else if(!m.matches&&porGiro)salirFS()});
+// Botón "atrás" de Android: primero sale de pantalla completa o cierra la ventana.
+AppP?.addListener('backButton',()=>{if(enFS)salirFS();else if(!$('dlg').hidden)$('dlg').hidden=true;else AppP.exitApp()});
 
 /* ---------- App instalable ---------- */
 let instEv=null;
@@ -489,9 +573,116 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;$('instal
 $('instalar').onclick=async()=>{if(!instEv)return;instEv.prompt();await instEv.userChoice.catch(()=>{});instEv=null;$('instalar').hidden=true};
 if(!DEMO&&!APP&&'serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 
+/* ---------- Calidad de video ---------- */
+function aplicaCalidad(){
+  $('calidad').textContent={auto:'Auto',alta:'HD',media:'SD',baja:'Ahorro'}[calidad];
+  if(!hls||!hls.levels||hls.levels.length<2)return;
+  const L=hls.levels.map((l,i)=>({i,h:l.height||0,b:l.bitrate||0})).sort((a,b)=>a.h-b.h||a.b-b.b);
+  hls.autoLevelCapping=-1;
+  if(calidad==='alta')hls.currentLevel=L[L.length-1].i;
+  else if(calidad==='baja')hls.currentLevel=L[0].i;
+  else if(calidad==='media'){const m=[...L].reverse().find(l=>l.h&&l.h<=480)||L[0];hls.currentLevel=-1;hls.autoLevelCapping=m.i}
+  else hls.currentLevel=-1;
+}
+$('calidad').onclick=()=>{
+  const res=hls?.levels?.length?[...new Set(hls.levels.map(l=>l.height).filter(Boolean))].sort((a,b)=>b-a).map(h=>h+'p').join(', '):'';
+  sheet('Calidad de video',`<div class="qopt" id="qopt">${Object.entries(CALIDAD).map(([k,t])=>`<button data-q="${k}" aria-pressed="${k===calidad}">${t}</button>`).join('')}</div><p class="note" style="margin-top:10px">${res?'Este canal ofrece: '+res+'.':'Algunos canales solo tienen una calidad.'} Se guarda para todos los canales.</p>`,[['Cerrar']]);
+  $('qopt').onclick=e=>{const b=e.target.closest('[data-q]');if(!b)return;calidad=b.dataset.q;ls.set('calidad',calidad);aplicaCalidad();$('dlg').hidden=true};
+};
+
+/* ---------- Mandar a la tele ---------- */
+async function enviarTele(){
+  if(!curCh)return;
+  try{v.pause()}catch(e){}
+  if(PANT?.enviar){try{await PANT.enviar({url:curCh.url,titulo:curCh.name});return}catch(e){}}
+  if(/Android/i.test(navigator.userAgent)&&/^https?:/.test(curCh.url)){location.href=`intent:${curCh.url}#Intent;action=android.intent.action.VIEW;type=application/x-mpegURL;S.title=${enc(curCh.name)};end`;return}
+  sheet('No se pudo abrir','<p class="note">En este equipo no hay una app para mandar video a la tele. En Android instala Web Video Caster o LocalCast desde Play Store.</p>',[['Cerrar']]);
+}
+$('tele').onclick=()=>{
+  if(!curCh){sheet('Primero elige un canal','<p class="note">Pon un canal y luego toca 📺 para mandarlo a tu tele.</p>',[['Cerrar']]);return}
+  sheet('Mandar a la tele',`<p class="note">Vas a abrir <b>${esc(curCh.name)}</b> en otra app que lo manda a tu tele: Chromecast, Google TV, Roku, Fire TV o Smart TV en el mismo WiFi.</p><p class="note">Si es la primera vez, instala gratis <b>Web Video Caster</b> o <b>LocalCast</b> desde Play Store y elígela en la lista.</p>`,[['Elegir app',enviarTele,'red'],['Cancelar']]);
+};
+
+/* ---------- Cambio de canal con números ---------- */
+let marcado='',marcaT=0;
+function marca(k){
+  if(k==='.'&&(marcado.includes('.')||!marcado))return;
+  marcado=(marcado+k).slice(0,5);
+  $('osdN').innerHTML=`<span class="big">${esc(marcado)}</span>`;$('osdP').textContent='';$('osd').classList.add('on');clearTimeout(osdT);
+  if($('padv'))$('padv').textContent=marcado;
+  clearTimeout(marcaT);marcaT=setTimeout(sintoniza,1800);
+}
+function sintoniza(){
+  clearTimeout(marcaT);const n=marcado;marcado='';if(!n)return;
+  const ok=c=>okKids(c)&&(verCaidos||!dead.has(c.url));
+  const pick=m=>all.filter(c=>c.num===m&&ok(c)).sort((a,b)=>malo(a)-malo(b))[0];
+  const c=pick(n)||(!n.includes('.')&&pick(n+'.1'));
+  $('dlg').hidden=true;
+  if(c)playCh(c);else if(LEGAL[n]||LEGAL[n+'.1'])comoVerLegal(LEGAL[n]?n:n+'.1');else{$('osdN').textContent=`El canal ${n} no existe`;$('osdP').textContent='';$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2500)}
+}
+$('teclado').onclick=()=>{
+  marcado='';
+  sheet('Marcar canal',`<div class="padv" id="padv">—</div><div class="pad" id="pad">${['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k=>`<button data-k="${k}">${k}</button>`).join('')}</div><p class="note" style="margin-top:8px">Los canales abiertos usan su número de siempre (2.1 Las Estrellas, 5.1 Canal 5, 7.1 Azteca 7…). Los demás van del 100 en adelante.</p>`,[['Ir',sintoniza,'red'],['Cerrar']]);
+  $('pad').onclick=e=>{const b=e.target.closest('[data-k]');if(!b)return;
+    if(b.dataset.k==='⌫'){marcado=marcado.slice(0,-1);$('padv').textContent=marcado||'—';clearTimeout(marcaT);if(marcado)marcaT=setTimeout(sintoniza,1800)}else marca(b.dataset.k)};
+};
+
+/* ---------- Mi estado ---------- */
+$('estado').innerHTML='<option value="">Sin elegir</option>'+ESTADOS.map(([c,n])=>`<option value="${c}">${n}</option>`).join('');
+function pintaEstado(){
+  $('estado').value=miEstado;
+  const n=all.filter(local).length,nom=(ESTADOS.find(e=>e[0]===miEstado)||[])[1];
+  $('soloLocal').hidden=!miEstado||!n;$('soloLocal').textContent=`📍 ${nom||''}`;$('soloLocal').setAttribute('aria-pressed',soloLocal);
+  $('estadoMsg').textContent=!miEstado?'':n?`Hay ${n} ${n===1?'señal local':'señales locales'} de ${nom}.`:(G?.e?`Todavía no hay canales locales de ${nom} en la lista.`:'Los canales locales aparecen cuando GitHub genere la guía.');
+}
+function ponEstado(c){miEstado=c;ls.set('estado',c);if(!c)soloLocal=false;pintaEstado();render()}
+$('estado').onchange=e=>ponEstado(e.target.value);
+$('soloLocal').onclick=()=>{soloLocal=!soloLocal;pintaEstado();render()};
+$('detectar').onclick=()=>{
+  if(!navigator.geolocation){$('estadoMsg').textContent='Este equipo no permite usar la ubicación. Elige tu estado en la lista.';return}
+  $('estadoMsg').textContent='Buscando tu ubicación…';
+  navigator.geolocation.getCurrentPosition(p=>{
+    const {latitude:a,longitude:o}=p.coords;
+    const e=ESTADOS.map(s=>[s,(s[2]-a)**2+((s[3]-o)*Math.cos(a*Math.PI/180))**2]).sort((x,y)=>x[1]-y[1])[0][0];
+    ponEstado(e[0]);$('estadoMsg').textContent=`Detectado: ${e[1]}. Si no es correcto, cámbialo en la lista. `+$('estadoMsg').textContent;
+  },()=>{$('estadoMsg').textContent='No se pudo obtener tu ubicación. Elige tu estado en la lista.'},{timeout:15000,maximumAge:36e5});
+};
+
+/* ---------- Actualizaciones del APK ---------- */
+const VER=+window.TL_VER||0,REPO=window.TL_REPO||'';
+let nueva=null;
+async function buscaActualizacion(manual){
+  if(!APP||!REPO||!VER)return;
+  if(!manual&&Date.now()-ls.get('updCheck',0)<6*36e5)return;
+  if(manual)$('verTxt').textContent='Buscando…';
+  try{
+    const r=await fetch(`https://api.github.com/repos/${REPO}/releases/latest`,{cache:'no-store'});if(!r.ok)throw 0;
+    const j=await r.json(),n=+String(j.tag_name||'').replace(/\D/g,'');ls.set('updCheck',Date.now());
+    const a=(j.assets||[]).find(x=>/\.apk$/i.test(x.name));
+    if(n>VER&&a){nueva={n,url:a.browser_download_url};
+      if(manual||ls.get('updNo',0)!==n){$('updTxt').textContent=`Hay una versión nueva de Tele Libre (${n})`;$('upd').hidden=false}}
+    else nueva=null;
+  }catch(e){if(manual){$('verTxt').textContent='No se pudo revisar. Revisa tu conexión.';return}}
+  pintaVersion();
+}
+function pintaVersion(){
+  $('verBox').hidden=!(APP&&VER);
+  $('verTxt').textContent=nueva?`Tienes la versión ${VER}. Ya está la ${nueva.n}.`:`Tienes la versión ${VER}, la más reciente.`;
+  $('verBtn').textContent=nueva?'Descargar versión nueva':'Buscar actualización';
+}
+function descargaNueva(){
+  if(!nueva)return;$('upd').hidden=true;
+  if(PANT?.abrir)PANT.abrir({url:nueva.url}).catch(()=>{location.href=nueva.url});else location.href=nueva.url;
+  sheet('Descargando la versión nueva','<p class="note">Cuando termine la descarga, toca la notificación (o abre el archivo en Descargas) y luego <b>Actualizar</b>. Tus favoritos, avisos y ajustes se conservan.</p>',[['Entendido',0,'red']]);
+}
+$('updSi').onclick=descargaNueva;
+$('updNo').onclick=()=>{$('upd').hidden=true;if(nueva)ls.set('updNo',nueva.n)};
+$('verBtn').onclick=()=>nueva?descargaNueva():buscaActualizacion(true);
+pintaVersion();
+
 setInterval(()=>{render();showEpg();checkRems()},30000);
 renderRems();applyKids();
-load().then(loadGuia).then(checkRems);
+load().then(loadGuia).then(checkRems).then(()=>buscaActualizacion(false));
 }
 </script>
 </body>

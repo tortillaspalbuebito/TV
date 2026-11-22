@@ -102,12 +102,14 @@ public class PantallaPlugin extends Plugin {
     public void reproducir(PluginCall call) {
         JSArray lista = call.getArray("lista");
         java.util.ArrayList<String> urls = new java.util.ArrayList<>(), nombres = new java.util.ArrayList<>();
+        java.util.ArrayList<Boolean> favList = new java.util.ArrayList<>();
         try {
             if (lista != null) {
                 for (int i = 0; i < lista.length(); i++) {
                     org.json.JSONObject o = lista.getJSONObject(i);
                     urls.add(o.getString("url"));
                     nombres.add(o.optString("nombre", "Tele Libre"));
+                    favList.add(o.optBoolean("fav", false));
                 }
             }
         } catch (Exception e) { /* usa lo que haya */ }
@@ -119,6 +121,9 @@ public class PantallaPlugin extends Plugin {
         Intent i = new Intent(getContext(), PlayerActivity.class);
         i.putStringArrayListExtra("urls", urls);
         i.putStringArrayListExtra("nombres", nombres);
+        boolean[] fv = new boolean[favList.size()];
+        for (int k = 0; k < fv.length; k++) fv[k] = favList.get(k);
+        i.putExtra("favs", fv);
         int indice = call.getInt("indice", 0);
         i.putExtra("indice", indice);
         getActivity().startActivity(i);
@@ -302,5 +307,30 @@ public class PantallaPlugin extends Plugin {
         }
         @Override public void onSessionResumeFailed(CastSession s, int e) { }
         @Override public void onSessionSuspended(CastSession s, int r) { }
+    }
+
+    /** Último canal que se vio en el reproductor de Android: {url, ts}. */
+    @PluginMethod
+    public void ultimoNativo(PluginCall call) {
+        android.content.SharedPreferences p = getContext().getSharedPreferences("telelibre", android.content.Context.MODE_PRIVATE);
+        JSObject r = new JSObject();
+        r.put("url", p.getString("ultima", ""));
+        r.put("ts", p.getLong("ultimaTs", 0));
+        call.resolve(r);
+    }
+
+    /** Favoritos cambiados en el reproductor de Android; se borran al leerlos. */
+    @PluginMethod
+    public void favoritosNativo(PluginCall call) {
+        android.content.SharedPreferences p = getContext().getSharedPreferences("telelibre_favs", android.content.Context.MODE_PRIVATE);
+        JSArray agregar = new JSArray(), quitar = new JSArray();
+        for (java.util.Map.Entry<String, ?> e : p.getAll().entrySet()) {
+            if (Boolean.TRUE.equals(e.getValue())) agregar.put(e.getKey()); else quitar.put(e.getKey());
+        }
+        p.edit().clear().apply();
+        JSObject r = new JSObject();
+        r.put("agregar", agregar);
+        r.put("quitar", quitar);
+        call.resolve(r);
     }
 }

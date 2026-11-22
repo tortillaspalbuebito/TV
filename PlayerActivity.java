@@ -1,6 +1,7 @@
 package com.telelibre.app;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -35,7 +36,8 @@ public class PlayerActivity extends Activity {
     private ArrayList<String> urls = new ArrayList<>();
     private ArrayList<String> nombres = new ArrayList<>();
     private int pos = 0, fallos = 0;
-    private TextView nombre, aviso, btnAnt, btnSig;
+    private TextView nombre, aviso, btnAnt, btnSig, btnFav;
+    private boolean[] favs;
     private final Handler h = new Handler(Looper.getMainLooper());
     private float x0, y0;
 
@@ -48,6 +50,8 @@ public class PlayerActivity extends Activity {
         urls = u;
         nombres = n != null ? n : new ArrayList<>(u);
         pos = Math.max(0, Math.min(getIntent().getIntExtra("indice", 0), urls.size() - 1));
+        favs = getIntent().getBooleanArrayExtra("favs");
+        if (favs == null || favs.length != urls.size()) favs = new boolean[urls.size()];
 
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -78,11 +82,18 @@ public class PlayerActivity extends Activity {
         ls.setMargins(0, 0, 30, 0);
         raiz.addView(btnAnt, la);
         raiz.addView(btnSig, ls);
+        btnFav = boton("☆");
+        btnFav.setTextSize(26);
+        FrameLayout.LayoutParams lf = new FrameLayout.LayoutParams(140, 140, Gravity.TOP | Gravity.END);
+        lf.setMargins(0, 30, 30, 0);
+        raiz.addView(btnFav, lf);
+        btnFav.setOnClickListener(v -> alternarFavorito());
         btnAnt.setOnClickListener(v -> cambiar(-1));
         btnSig.setOnClickListener(v -> cambiar(1));
         vista.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) vis -> {
             btnAnt.setVisibility(vis);
             btnSig.setVisibility(vis);
+            btnFav.setVisibility(vis);
         });
         setContentView(raiz);
 
@@ -114,6 +125,10 @@ public class PlayerActivity extends Activity {
                     fallos = 0;
                     aviso.setVisibility(View.GONE);
                     ultima = urls.get(pos);
+                    getSharedPreferences("telelibre", MODE_PRIVATE).edit()
+                            .putString("ultima", ultima)
+                            .putLong("ultimaTs", System.currentTimeMillis())
+                            .apply();
                 }
             }
         });
@@ -149,6 +164,7 @@ public class PlayerActivity extends Activity {
         String url = urls.get(pos);
         ultima = url;
         nombre.setText(nombres.get(pos));
+        pintarFavorito();
         nombre.setVisibility(View.VISIBLE);
         h.removeCallbacksAndMessages("nombre");
         h.postAtTime(() -> nombre.setVisibility(View.GONE), "nombre", android.os.SystemClock.uptimeMillis() + 4000);
@@ -157,6 +173,21 @@ public class PlayerActivity extends Activity {
         player.setMediaItem(item.build());
         player.prepare();
         player.setPlayWhenReady(true);
+    }
+
+    private void pintarFavorito() {
+        btnFav.setText(favs[pos] ? "★" : "☆");
+        btnFav.setTextColor(favs[pos] ? 0xFFF5B301 : Color.WHITE);
+    }
+
+    /** Los cambios se guardan aquí y la app los aplica al volver o al abrirse. */
+    private void alternarFavorito() {
+        favs[pos] = !favs[pos];
+        pintarFavorito();
+        getSharedPreferences("telelibre_favs", MODE_PRIVATE).edit()
+                .putBoolean(urls.get(pos), favs[pos]).apply();
+        mostrarAviso(favs[pos] ? "Agregado a favoritos" : "Quitado de favoritos");
+        h.postAtTime(() -> aviso.setVisibility(View.GONE), "fav", android.os.SystemClock.uptimeMillis() + 1500);
     }
 
     private void cambiar(int d) {

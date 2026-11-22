@@ -29,7 +29,7 @@ video,.player canvas{width:100%;height:100%;display:block;background:#000}
 .msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;text-align:center;padding:20px;background:rgba(0,0,0,.75)}
 .osd{position:absolute;left:12px;top:12px;max-width:75%;background:rgba(0,0,0,.7);color:#fff;padding:8px 12px;border-radius:10px;pointer-events:none;opacity:0;transition:opacity .3s}
 .osd.on{opacity:1}.osd b{display:block;font-size:17px}.osd span{font-size:13px;color:#ffb3ae}
-.fsb{position:absolute;right:8px;top:8px;width:44px;height:44px;border-radius:10px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;cursor:pointer}
+.tools{position:absolute;right:8px;top:8px;display:flex;gap:6px;z-index:3}.fsb{width:44px;height:44px;border-radius:10px;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;cursor:pointer}
 .now{display:flex;align-items:center;gap:8px;padding:10px 0;flex-wrap:wrap}
 .now b{font-size:18px;flex:1}
 button,select,input{font:inherit;font-size:16px;color:var(--ink)}
@@ -62,6 +62,7 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 .ch i b{display:block;height:100%;background:var(--red)}
 .star{position:absolute;top:2px;right:2px;font-size:16px;color:var(--mute);background:none;border:0;cursor:pointer;width:32px;height:32px}
 .star.y{color:#f5b301}
+#favBtn.y{color:#f5b301}
 .num{display:inline-block;min-width:2.2em;font-size:11px;font-weight:800;color:var(--mute);font-variant-numeric:tabular-nums;margin-right:4px}
 .lt{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:#0a8f5a;border-radius:5px;padding:0 6px;margin-left:4px;vertical-align:1px}
 .pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -121,7 +122,7 @@ video{object-fit:contain}
   <div class="player" id="pw">
     <video id="v" controls playsinline controlslist="nofullscreen"></video>
     <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
-    <button class="fsb" id="calidad" style="right:58px;width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button>
+    <div class="tools"><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
   <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
@@ -327,8 +328,7 @@ function setList(list){
   numerar();
   all.forEach(c=>{c.cats=clasifica(c);if(!c.cats.length)c.cats=['general']});pintaGrupos();
   render();renderRecent();
-  const last=all.find(c=>c.url===ls.get('last',''));
-  if(last&&okKids(last))playCh(last,true);
+  restaurar();
 }
 
 /* ---------- Guía (guia.json generado por GitHub Actions) ---------- */
@@ -392,12 +392,35 @@ function tile(x){
 /* ---------- Reproductor ---------- */
 function msg(t,next,again){$('msg').hidden=!t;$('msgTxt').textContent=t||'';$('nextBtn').hidden=!next;$('againBtn').hidden=!again;$('nextBtn').className=again?'btn':'btn red';}
 /* Reproductor nativo de Android: se le pasa la lista para poder cambiar de canal ahí mismo. */
+async function restaurar(){
+  let u=ls.get('last',''),ts=ls.get('lastTs',0);
+  if(PANT?.ultimoNativo){try{const r=await PANT.ultimoNativo();if(r?.url&&r.ts>ts){u=r.url;setLast(u);marcaNativo(u,true)}}catch(e){}}
+  await aplicaFavsNativo();
+  const c=all.find(x=>x.url===u);if(!c||!okKids(c))return;
+  if(PANT?.reproducir&&(nativos.has(u)||siempreNativo)){
+    curCh=c;$('nowName').textContent=(c.num?c.num+'  ':'')+c.name;document.body.classList.add('playing');render();showEpg();pintaFav();
+    msg(`Último canal: ${c.name}`,false,true);return;
+  }
+  playCh(c,true);
+}
+/* Favoritos */
+function pintaFav(){const b=$('favBtn');b.hidden=!curCh;if(!curCh)return;const y=favs.has(curCh.url);b.textContent=y?'★':'☆';b.classList.toggle('y',y);b.setAttribute('aria-label',y?'Quitar de favoritos':'Agregar a favoritos')}
+function alternaFav(){if(!curCh)return;const y=!favs.has(curCh.url);y?favs.add(curCh.url):favs.delete(curCh.url);ls.set('favs',[...favs]);pintaFav();render();
+  $('osdN').textContent=y?'★ Agregado a favoritos':'Quitado de favoritos';$('osdP').textContent=curCh.name;$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2000)}
+async function aplicaFavsNativo(){
+  if(!PANT?.favoritosNativo)return;
+  try{const r=await PANT.favoritosNativo();(r.agregar||[]).forEach(u=>favs.add(u));(r.quitar||[]).forEach(u=>favs.delete(u));
+    if((r.agregar||[]).length||(r.quitar||[]).length){ls.set('favs',[...favs]);render();pintaFav()}}catch(e){}
+}
+function setLast(u){ls.set('last',u);ls.set('lastTs',Date.now())}
+let nativos=new Set(ls.get('nativos',[]));
+const marcaNativo=(u,si)=>{si?nativos.add(u):nativos.delete(u);ls.set('nativos',[...nativos].slice(-300))};
 function abrirNativo(ch){
   if(!PANT?.reproducir||!ch)return;probadoNativo.add(ch.url);
   let lista=view.includes(ch)?view:[ch,...view];const i=lista.indexOf(ch),a=Math.max(0,i-300);
   lista=lista.slice(a,i+300);
-  PANT.reproducir({lista:lista.map(c=>({url:c.url,nombre:(c.num?c.num+'  ':'')+c.name})),indice:i-a}).catch(()=>{});
-  msg(`${ch.name} se está viendo en el reproductor de Android.`,true,true);ls.set('last',ch.url);
+  PANT.reproducir({lista:lista.map(c=>({url:c.url,nombre:(c.num?c.num+'  ':'')+c.name,fav:favs.has(c.url)})),indice:i-a}).catch(()=>{});
+  marcaNativo(ch.url,true);msg(`${ch.name} se está viendo en el reproductor de Android.`,true,true);setLast(ch.url);
   recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
 }
 function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.name:'';$('osdP').textContent=a?a.e[2]:'';
@@ -405,10 +428,10 @@ function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.nam
 function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
 function playCh(ch,auto){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
-  $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();
+  $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();pintaFav();
   if(hls){hls.destroy();hls=null}
   if(enTele&&!auto){mandarCast(ch);msg(`Se está viendo en la tele: ${ch.name}`);return}
-  const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);ls.set('last',ch.url);
+  const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);setLast(ch.url);marcaNativo(ch.url,false);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
   const nativo=()=>abrirNativo(ch);
@@ -416,6 +439,7 @@ function playCh(ch,auto){
   const fail=()=>{if(PANT?.reproducir&&!auto&&!probadoNativo.has(ch.url)){if(hls){hls.destroy();hls=null}nativo();return}
     failed[ch.url]=Date.now();ls.set('failed',failed);
     if(!auto&&saltos<5){saltos++;msg('Este canal no está disponible. Pasando al siguiente…');skipT=setTimeout(()=>{if(curCh===ch)step(1)},2500)}
+    else if(auto&&PANT?.reproducir){saltos=0;msg(`Último canal: ${ch.name}`,true,true)}
     else{saltos=0;msg('Este canal no está disponible ahora.',true)}};
   if(DEMO){msg('');DEMO.show(ch,ahora);ok();return}
   msg('Conectando…');
@@ -547,7 +571,7 @@ function pintaGrupos(){
 $('quick').onclick=e=>{const b=e.target.closest('[data-g]');if(!b)return;grupo=b.dataset.g;ls.set('grupo',grupo);$('cat').value='';render()};
 grid.addEventListener('click',e=>{
   const f=e.target.closest('[data-f]');
-  if(f){e.stopPropagation();const x=view[+f.dataset.f];favs.has(x.url)?favs.delete(x.url):favs.add(x.url);ls.set('favs',[...favs]);render();return}
+  if(f){e.stopPropagation();const x=view[+f.dataset.f];favs.has(x.url)?favs.delete(x.url):favs.add(x.url);ls.set('favs',[...favs]);render();pintaFav();return}
   const c=e.target.closest('[data-i]');if(c)playCh(view[+c.dataset.i]);
 });
 grid.addEventListener('keydown',e=>{if(e.key==='Enter'){const c=e.target.closest('[data-i]');if(c)playCh(view[+c.dataset.i])}});
@@ -561,11 +585,12 @@ document.addEventListener('click',e=>{
   const u=e.target.closest('#rec [data-u],#kguia [data-u]');if(u){playCh(all.find(c=>c.url===u.dataset.u))}
 });
 $('againBtn').onclick=()=>abrirNativo(curCh);
+$('favBtn').onclick=alternaFav;
 // Al volver del reproductor de Android: quedarse en el canal donde te quedaste, sin aviso de error.
 PANT?.addListener?.('nativoCerrado',d=>{
   const c=all.find(x=>x.url===d.url);if(!c)return;curCh=c;clearTimeout(skipT);
   if(hls){hls.destroy();hls=null}try{v.pause()}catch(e){}
-  $('nowName').textContent=(c.num?c.num+'  ':'')+c.name;ls.set('last',c.url);render();showEpg();
+  $('nowName').textContent=(c.num?c.num+'  ':'')+c.name;setLast(c.url);marcaNativo(c.url,true);render();showEpg();pintaFav();aplicaFavsNativo();
   msg(`${c.name} se ve en el reproductor de Android.`,true,true);
 });
 $('next').onclick=()=>step(1);$('prev').onclick=()=>step(-1);$('nextBtn').onclick=()=>step(1);

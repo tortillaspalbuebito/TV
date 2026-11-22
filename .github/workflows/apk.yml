@@ -67,13 +67,20 @@ jobs:
       - name: Compilar
         run: |
           # Misma llave en cada compilación, para poder actualizar encima de la versión anterior
-          mkdir -p ~/.android && cp debug.keystore ~/.android/debug.keystore
+          # Firmar SIEMPRE con la llave del repositorio
+          sed -i '0,/^android {/s//android {\n    signingConfigs {\n        debug {\n            storeFile rootProject.file("..\/debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n            storeType "pkcs12"\n        }\n    }/' android/app/build.gradle
+          sed -n '1,25p' android/app/build.gradle
           sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"[^\"]*\"/versionName \"1.${GITHUB_RUN_NUMBER}\"/" android/app/build.gradle
           grep -nE "versionCode|versionName" android/app/build.gradle
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../TeleLibre.apk
+          # Comprobar que la firma es la del repositorio
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1)
+          $APKSIGNER verify --print-certs ../TeleLibre.apk | grep -i "SHA-256"
+          ESPERADA=$(keytool -list -v -keystore ../debug.keystore -storepass android | grep -m1 "SHA256:" | sed 's/.*SHA256: //; s/://g' | tr 'A-F' 'a-f')
+          $APKSIGNER verify --print-certs ../TeleLibre.apk | grep -qi "$ESPERADA" || { echo "La firma no coincide"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:

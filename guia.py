@@ -225,25 +225,41 @@ def stream_urls(text):
     return [l.strip() for l in text.splitlines() if l.strip() and not l.startswith("#")]
 
 
-def vivo(url):
-    """True si la señal responde (o está bloqueada por país); False si está caída."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 TeleLibre"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            head = r.read(2048)
-        return r.status < 400 and (b"#EXTM3U" in head or not url.lower().split("?")[0].endswith(".m3u8"))
-    except urllib.error.HTTPError as e:
-        return e.code in GEO
-    except Exception:
-        return False
+def estado_senal(url):
+    """'ok', 'dudoso' (no respondió desde EE. UU.: puede verse en México) o 'caido' (ya no existe)."""
+    import socket
+    for intento in range(2):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Linux; Android) TeleLibre"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                head = r.read(4096)
+            if b"#EXTM3U" in head or not url.lower().split("?")[0].endswith(".m3u8"):
+                return "ok"
+            return "caido" if b"<html" in head.lower() else "dudoso"
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 410):
+                return "caido"
+            return "dudoso"
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, socket.gaierror):
+                return "caido"          # el dominio ya no existe
+            if intento:
+                return "dudoso"
+        except Exception:
+            if intento:
+                return "dudoso"
+    return "dudoso"
 
 
 def caidos(urls, hilos=40):
+    """Solo se esconden las señales que de plano ya no existen."""
+    from collections import Counter
     from concurrent.futures import ThreadPoolExecutor
     urls = list(dict.fromkeys(urls))
     with ThreadPoolExecutor(hilos) as ex:
-        res = list(ex.map(vivo, urls))
-    return [u for u, ok in zip(urls, res) if not ok]
+        res = list(ex.map(estado_senal, urls))
+    print("revisión de señales:", dict(Counter(res)))
+    return [u for u, r in zip(urls, res) if r == "caido"]
 
 
 def main():

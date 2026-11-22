@@ -192,6 +192,7 @@ video{object-fit:contain}
     </section>
     <section data-adult>
       <h3>Canales</h3>
+      <div id="aquiBox" hidden style="display:grid;gap:8px"><button class="btn red" id="aquiBtn">Revisar canales desde mi celular</button><p class="note" id="aquiTxt" role="status"></p></div>
       <label class="sw"><input type="checkbox" id="verCaidos"> Mostrar también los canales caídos</label>
       <label class="sw" id="nativoBox" hidden><input type="checkbox" id="nativo"> Usar siempre el reproductor de Android</label>
       <p class="note" id="caidosInfo"></p>
@@ -335,7 +336,8 @@ async function loadGuia(){
   if(DEMO){G=DEMO.guide}
   else try{const r=await fetch(window.TL_GUIA||'guia.json',{cache:'no-cache'});if(!r.ok)throw 0;G=await r.json()}catch(e){G=null}
   all.forEach(c=>delete c._g);dead=new Set(G?.x||[]);
-  $('caidosInfo').textContent=(G?`La última revisión encontró ${dead.size} ${dead.size===1?'señal caída':'señales caídas'}${verCaidos?'; se muestran al final':(dead.size===1?' y la escondió':' y las escondió')}. Se revisan cada 4 horas.`:'Todavía no hay revisión de canales (se genera en GitHub).')+(pagados?` Además se ${pagados===1?'esconde 1 señal de un canal que normalmente es':`esconden ${pagados} señales de canales que normalmente son`} de paga.`:'')+(noOficiales?` También se ${noOficiales===1?'esconde 1 retransmisión no oficial':`esconden ${noOficiales} retransmisiones no oficiales`} de cadenas nacionales (Canal 5, Azteca, etc.).`:'');
+  const nAqui=Object.keys(aqui).length;
+  $('caidosInfo').textContent=(G?`GitHub encontró ${dead.size} ${dead.size===1?'señal que ya no existe':'señales que ya no existen'}.`:'')+(nAqui?' Lo que revisó tu celular tiene prioridad: si aquí funciona, se muestra.':'')+(pagados?` Además se ${pagados===1?'esconde 1 señal de un canal que normalmente es':`esconden ${pagados} señales de canales que normalmente son`} de paga.`:'')+(noOficiales?` También se ${noOficiales===1?'esconde 1 retransmisión no oficial':`esconden ${noOficiales} retransmisiones no oficiales`} de cadenas nacionales (Canal 5, Azteca, etc.).`:'');
   pintaEstado();
   render();showEpg();renderKGuia();
 }
@@ -344,13 +346,17 @@ const kTag=e=>korean(e)?'<span class="kt">Coreano</span>':'';
 
 /* ---------- Filtros ---------- */
 function okKids(x){return !kids||x.cats.some(c=>KIDS.has(c))}
-function malo(x){return dead.has(x.url)||(failed[x.url]&&Date.now()-failed[x.url]<864e5)}
+// Revisión hecha desde el celular (manda sobre la de GitHub, que se hace desde EE. UU.)
+let aqui=ls.get('aqui',{});
+const aquiDe=u=>{const r=aqui[u];return r&&Date.now()-r[1]<3*864e5?r[0]:undefined};
+function esCaido(x){const a=aquiDe(x.url);return a===0||(a===undefined&&dead.has(x.url))}
+function malo(x){return esCaido(x)||(failed[x.url]&&Date.now()-failed[x.url]<864e5)}
 function render(){
   const q=$('q').value.trim().toLowerCase(),p=$('pais').value,c=$('cat').value;ls.set('pais',p);
   document.querySelectorAll('#quick .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===c));
   view=all.filter(x=>{
     if(!okKids(x))return false;
-    if(!verCaidos&&dead.has(x.url))return false;
+    if(!verCaidos&&esCaido(x))return false;
     if(p&&(p==='*fav'?!favs.has(x.url):x.pais!==p))return false;
     if(c&&!x.cats.includes(c))return false;
     if(soloLocal&&!local(x))return false;
@@ -378,7 +384,7 @@ function playCh(ch,auto){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
   $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();
   if(hls){hls.destroy();hls=null}
-  const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);ls.set('last',ch.url);
+  const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);ls.set('last',ch.url);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
   const nativo=()=>{probadoNativo.add(ch.url);PANT.reproducir({url:ch.url,titulo:(ch.num?ch.num+'  ':'')+ch.name}).catch(()=>{});
@@ -438,7 +444,7 @@ function progSheet(ch,e){
 /* ---------- K-dramas en la guía ---------- */
 function renderKGuia(){
   const t=now(),items=[];
-  all.forEach(c=>{if(!okKids(c)||(!verCaidos&&dead.has(c.url)))return;(progs(c)||[]).forEach(e=>{if(korean(e)&&e[1]>t)items.push([c,e])})});
+  all.forEach(c=>{if(!okKids(c)||(!verCaidos&&esCaido(c)))return;(progs(c)||[]).forEach(e=>{if(korean(e)&&e[1]>t)items.push([c,e])})});
   items.sort((a,b)=>a[1][0]-b[1][0]);
   $('kguia').innerHTML=items.length?items.slice(0,30).map(([c,e])=>{const live=e[0]<=t;
     return `<div class="${live?'ya':''}"><time>${live?'Ahora':hora(e[0])}</time><p>${esc(e[2])}<small>${esc(c.name)}</small></p>${live?`<button class="btn sm red" data-u="${esc(c.url)}">Ver</button>`:remBtn(c,e)}</div>`}).join('')
@@ -614,7 +620,7 @@ function marca(k){
 }
 function sintoniza(){
   clearTimeout(marcaT);const n=marcado;marcado='';if(!n)return;
-  const ok=c=>okKids(c)&&(verCaidos||!dead.has(c.url));
+  const ok=c=>okKids(c)&&(verCaidos||!esCaido(c));
   const pick=m=>all.filter(c=>c.num===m&&ok(c)).sort((a,b)=>malo(a)-malo(b))[0];
   const c=pick(n)||(!n.includes('.')&&pick(n+'.1'));
   $('dlg').hidden=true;
@@ -680,9 +686,28 @@ $('updNo').onclick=()=>{$('upd').hidden=true;if(nueva)ls.set('updNo',nueva.n)};
 $('verBtn').onclick=()=>nueva?descargaNueva():buscaActualizacion(true);
 pintaVersion();
 
+/* ---------- Revisar canales desde el celular ---------- */
+let revisando=false;
+async function revisarAqui(manual){
+  if(!PANT?.probar||revisando||!all.length)return;
+  if(!manual&&Date.now()-ls.get('aquiFecha',0)<20*36e5)return;
+  revisando=true;$('aquiBtn').disabled=true;
+  const urls=[...new Set(all.map(c=>c.url))],T=urls.length;let ok=0,mal=0;
+  for(let i=0;i<T;i+=120){
+    $('aquiTxt').textContent=`Revisando ${Math.min(i+120,T)} de ${T}…`;
+    try{const r=await PANT.probar({urls:urls.slice(i,i+120)});const t=Date.now();
+      (r.ok||[]).forEach(u=>{aqui[u]=[1,t];ok++});(r.mal||[]).forEach(u=>{aqui[u]=[0,t];mal++});}catch(e){}
+  }
+  ls.set('aqui',aqui);ls.set('aquiFecha',Date.now());revisando=false;$('aquiBtn').disabled=false;
+  $('aquiTxt').textContent=`Listo: ${ok} señales funcionan desde tu internet y ${mal} ${mal===1?'no respondió':'no respondieron'}. Se vuelve a revisar sola cada día.`;
+  all.forEach(c=>delete c._g);loadGuia();
+}
+if(PANT?.probar){$('aquiBox').hidden=false;const f=ls.get('aquiFecha',0);$('aquiTxt').textContent=f?`Última revisión: ${new Date(f).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}.`:'Prueba cada canal desde tu internet, para mostrar solo los que de verdad abren.'}
+$('aquiBtn').onclick=()=>revisarAqui(true);
+
 setInterval(()=>{render();showEpg();checkRems()},30000);
 renderRems();applyKids();
-load().then(loadGuia).then(checkRems).then(()=>buscaActualizacion(false));
+load().then(loadGuia).then(checkRems).then(()=>buscaActualizacion(false)).then(()=>setTimeout(()=>revisarAqui(false),4000));
 }
 </script>
 </body>

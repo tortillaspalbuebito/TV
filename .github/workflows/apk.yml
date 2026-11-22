@@ -57,10 +57,10 @@ jobs:
           mkdir -p $R/drawable && cp ic_stat_tv.png $R/drawable/ic_stat_tv.png
           # Complemento de pantalla completa
           J=android/app/src/main/java/com/telelibre/app
-          mkdir -p $J && cp MainActivity.java PantallaPlugin.java PlayerActivity.java $J/
+          mkdir -p $J && cp MainActivity.java PantallaPlugin.java PlayerActivity.java CastOptionsProvider.java $J/
           # Reproductor nativo de Android (Media3)
-          sed -i 's#</application>#<activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|navigation" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" /></application>#' $M
-          sed -i '0,/^dependencies {/s//dependencies {\n    implementation "androidx.media3:media3-exoplayer:1.4.1"\n    implementation "androidx.media3:media3-exoplayer-hls:1.4.1"\n    implementation "androidx.media3:media3-ui:1.4.1"/' android/app/build.gradle
+          sed -i 's#</application>#<activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|navigation" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" /><meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" android:value="com.telelibre.app.CastOptionsProvider" /></application>#' $M
+          sed -i '0,/^dependencies {/s//dependencies {\n    implementation "androidx.media3:media3-exoplayer:1.4.1"\n    implementation "androidx.media3:media3-exoplayer-hls:1.4.1"\n    implementation "androidx.media3:media3-ui:1.4.1"\n    implementation "com.google.android.gms:play-services-cast-framework:21.5.0"\n    implementation "androidx.mediarouter:mediarouter:1.7.0"/' android/app/build.gradle
           grep -n "media3" android/app/build.gradle
           npx cap sync android
 

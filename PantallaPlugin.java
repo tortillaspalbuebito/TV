@@ -3,6 +3,15 @@ package com.telelibre.app;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
+import android.provider.Settings;
+import androidx.mediarouter.app.MediaRouteChooserDialog;
+import com.google.android.gms.cast.MediaInfo;
+import com.google.android.gms.cast.MediaLoadRequestData;
+import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.framework.CastContext;
+import com.google.android.gms.cast.framework.CastSession;
+import com.google.android.gms.cast.framework.SessionManagerListener;
+import com.google.android.gms.cast.framework.media.RemoteMediaClient;
 import android.os.Build;
 import android.view.Window;
 import java.io.InputStream;
@@ -201,5 +210,97 @@ public class PantallaPlugin extends Plugin {
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    /* ---------- Chromecast / Google TV ---------- */
+    private String pendUrl, pendTit;
+    private boolean escuchando = false;
+
+    @PluginMethod
+    public void transmitir(PluginCall call) {
+        final String url = call.getString("url");
+        final String tit = call.getString("titulo", "Tele Libre");
+        if (url == null) { call.reject("Sin canal"); return; }
+        getActivity().runOnUiThread(() -> {
+            try {
+                CastContext cc = CastContext.getSharedInstance(getContext());
+                if (!escuchando) {
+                    cc.getSessionManager().addSessionManagerListener(new Escucha(), CastSession.class);
+                    escuchando = true;
+                }
+                CastSession ses = cc.getSessionManager().getCurrentCastSession();
+                if (ses != null && ses.isConnected()) {
+                    cargar(ses, url, tit);
+                } else {
+                    pendUrl = url;
+                    pendTit = tit;
+                    MediaRouteChooserDialog d = new MediaRouteChooserDialog(getActivity());
+                    if (cc.getMergedSelector() != null) d.setRouteSelector(cc.getMergedSelector());
+                    d.show();
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Chromecast no disponible");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void detenerTele(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try { CastContext.getSharedInstance(getContext()).getSessionManager().endCurrentSession(true); } catch (Exception e) { }
+            call.resolve();
+        });
+    }
+
+    /** Abre "Transmitir pantalla" de Android (sirve para Roku y la mayoría de Smart TV). */
+    @PluginMethod
+    public void duplicarPantalla(PluginCall call) {
+        try {
+            Intent i = new Intent("android.settings.CAST_SETTINGS");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+        } catch (Exception e) {
+            Intent i = new Intent(Settings.ACTION_WIRELESS_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+        }
+        call.resolve();
+    }
+
+    private void cargar(CastSession ses, String url, String tit) {
+        MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
+        md.putString(MediaMetadata.KEY_TITLE, tit);
+        MediaInfo info = new MediaInfo.Builder(url)
+                .setStreamType(MediaInfo.STREAM_TYPE_LIVE)
+                .setContentType("application/x-mpegURL")
+                .setMetadata(md)
+                .build();
+        RemoteMediaClient r = ses.getRemoteMediaClient();
+        if (r != null) r.load(new MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).build());
+        avisar("enviando", tit);
+    }
+
+    private void avisar(String estado, String tit) {
+        JSObject d = new JSObject();
+        d.put("estado", estado);
+        d.put("titulo", tit == null ? "" : tit);
+        notifyListeners("tele", d);
+    }
+
+    private class Escucha implements SessionManagerListener<CastSession> {
+        @Override public void onSessionStarting(CastSession s) { }
+        @Override public void onSessionStarted(CastSession s, String id) {
+            if (pendUrl != null) { cargar(s, pendUrl, pendTit); pendUrl = null; }
+        }
+        @Override public void onSessionStartFailed(CastSession s, int e) { pendUrl = null; avisar("fallo", ""); }
+        @Override public void onSessionEnding(CastSession s) { }
+        @Override public void onSessionEnded(CastSession s, int e) { avisar("desconectado", ""); }
+        @Override public void onSessionResuming(CastSession s, String id) { }
+        @Override public void onSessionResumed(CastSession s, boolean b) {
+            if (pendUrl != null) { cargar(s, pendUrl, pendTit); pendUrl = null; }
+        }
+        @Override public void onSessionResumeFailed(CastSession s, int e) { }
+        @Override public void onSessionSuspended(CastSession s, int r) { }
     }
 }

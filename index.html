@@ -125,6 +125,7 @@ video{object-fit:contain}
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
   <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
+  <div class="aviso" id="teleBar" hidden style="position:static;border-radius:10px;margin-bottom:8px;background:#1a73e8"><b id="teleTxt"></b><button class="btn sm" id="teleStop">Dejar de transmitir</button></div>
   <div class="epg" id="epg"></div>
 
   <div id="recBox" hidden><p class="lbl">Vistos recientemente</p><div class="rec" id="rec"></div></div>
@@ -219,7 +220,17 @@ const PANT=window.Capacitor?.Plugins?.Pantalla||null,AppP=window.Capacitor?.Plug
 const DEF='https://iptv-org.github.io/iptv/languages/spa.m3u';
 const PAISES={mx:'México',ar:'Argentina',es:'España',co:'Colombia',cl:'Chile',pe:'Perú',ve:'Venezuela',us:'Estados Unidos',ec:'Ecuador',gt:'Guatemala',cr:'Costa Rica',pa:'Panamá',do:'Rep. Dominicana',uy:'Uruguay',py:'Paraguay',bo:'Bolivia',hn:'Honduras',sv:'El Salvador',ni:'Nicaragua',cu:'Cuba',pr:'Puerto Rico',kr:'Corea'};
 const CATS={general:'General',news:'Noticias',entertainment:'Entretenimiento',movies:'Películas',series:'Series y novelas',sports:'Deportes',kids:'Infantil',music:'Música',documentary:'Documentales',religious:'Religión',lifestyle:'Estilo de vida',cooking:'Cocina',culture:'Cultura',education:'Educación',comedy:'Comedia',classic:'Clásicos',family:'Familia',animation:'Animación',business:'Negocios',travel:'Viajes',science:'Ciencia',outdoor:'Aire libre',shop:'Compras',weather:'Clima',legislative:'Legislativo',public:'Público',relax:'Relajación',auto:'Autos',undefined:'Otros'};
-const QUICK=[['','Todo'],['news','Noticias'],['series','Novelas y series'],['movies','Películas'],['sports','Deportes'],['kids','Infantil'],['music','Música']];
+// Botones de categoría: cada uno junta varias categorías parecidas.
+const GRUPOS=[['news','Noticias',['news','weather','business']],['series','Novelas y series',['series','comedy','classic']],['movies','Películas',['movies']],['sports','Deportes',['sports','outdoor','auto']],['kids','Infantil',['kids','animation','family']],['music','Música',['music']],['culture','Cultura',['culture','documentary','education','science','travel','cooking','lifestyle']],['religious','Religión',['religious']],['public','Gobierno',['legislative','public']],['general','Variedad y locales',['general','entertainment']]];
+// Pistas en el nombre del canal (muchos vienen como "general" o sin categoría).
+const PISTAS=[['news',/\b(noticias?|news|informativ|noticiero|n\+|nmas|milenio|adn ?40|foro ?tv|24 ?h|telediario|canal del congreso|justicia)/],['sports',/\b(deport|sports?\b|futbol|soccer|liga\b|gol\b|tudn|box\b|lucha|beisbol|toros)/],['series',/\b(novelas?|telenovela|series?\b|dorama|k-?drama|drama)/],['movies',/\b(cine|pelicula|movies?\b|films?\b|cinema)/],['kids',/\b(kids|infantil|ninos|caricatura|cartoon|junior|toons?\b|peques|baby|chavos)/],['music',/\b(musica|music|hits|radio|fm\b|banda\b|grupera|ranchera|salsa|regga?eton|karaoke|tropical|cumbia|mariachi|norten)/],['religious',/\b(iglesia|cristian|catolic|evangel|religi|biblia|jesus|esne|ewtn|tbn|enlace|adventist|maria vision|guadalupe|parroquia|ministerio)/],['culture',/\b(cultur|documental|educa|universi|unam|aprende|historia|ciencia|cocina|viajes?\b|naturaleza)/],['public',/\b(congreso|senado|camara|gobierno|legislativ|justicia|tv publica|canal 22|canal once)/]];
+function clasifica(x){
+  const s=' '+(x.name||'').normalize('NFKD').replace(/[̀-ͯ]/g,'').toLowerCase()+' ';
+  const c=new Set(x.cats.filter(k=>k!=='general'&&k!=='undefined'));
+  PISTAS.forEach(([k,re])=>{if(re.test(s))c.add(k)});
+  return [...c];
+}
+const enGrupo=(x,g)=>{const G=GRUPOS.find(z=>z[0]===g);return !G||x.cats.some(k=>G[2].includes(k))};
 // Cadenas que en México normalmente son de paga: no se muestran.
 const PAGO=['golden','skysport','foxsport','cinemax','warnerchannel','warnertv','universaltv','universalchannel','studiouniversal','disneychannel','disneyjunior','disneyxd','nickelodeon','nickjr','cartoonnetwork','cartoonito','tooncast','discovery','nationalgeographic','natgeo','history','lifetime','sonychannel','sonymovies','comedycentral','paramountnetwork','starchannel','cinecanal','syfy','telehit','bandamax','tlnovelas','distritocomedia','depelicula','unicable','cinelatino','ritmoson','movistar','laligatv','eurosport','tycsports','winsports','directvsports','nbatv','nflnetwork','mlbnetwork','babytv','dreamworks','foodnetwork','hgtv','animalplanet','filmandarts','europaeuropa','trutv','telemundointernacional','nickmusic','clarosports','clarocinema','tntsports','espn'];
 const PAGO_CORTO=/^(amc|cnn|mtv|vh1|tnt|tbs|tcm|hbo|axn|bein|dazn|espn|tudn|isat|fx|dsports)\d*$/;
@@ -259,6 +270,7 @@ const hora=s=>new Date(s*1000).toLocaleTimeString('es-MX',{hour:'numeric',minute
 let all=[],view=[],curCh=null,hls=null,G=null,solo=false,saltos=0,skipT=0,osdT=0;
 let favs=new Set(ls.get('favs',[])),recent=ls.get('recent',[]),rems=ls.get('rems',[]),failed=ls.get('failed',{});
 let verCaidos=ls.get('verCaidos',false),kids=ls.get('kids',false),pinSaved=ls.get('pin','');
+let grupo=ls.get('grupo',''),enTele=false;
 let dead=new Set(),pagados=0,noOficiales=0,siempreNativo=ls.get('nativo',false),probadoNativo=new Set(),miEstado=ls.get('estado',''),soloLocal=false,calidad=ls.get('calidad','auto');
 
 /* ---------- Lista M3U ---------- */
@@ -313,6 +325,7 @@ function setList(list){
   $('cat').innerHTML='<option value="">Todas las categorías</option>'+cs.map(c=>`<option value="${esc(c)}">${esc(CATS[c]||c)}</option>`).join('');
   $('pais').value=ls.get('pais','');if($('pais').selectedIndex<0)$('pais').value='';
   numerar();
+  all.forEach(c=>{c.cats=clasifica(c);if(!c.cats.length)c.cats=['general']});pintaGrupos();
   render();renderRecent();
   const last=all.find(c=>c.url===ls.get('last',''));
   if(last&&okKids(last))playCh(last,true);
@@ -353,12 +366,13 @@ function esCaido(x){const a=aquiDe(x.url);return a===0||(a===undefined&&dead.has
 function malo(x){return esCaido(x)||(failed[x.url]&&Date.now()-failed[x.url]<864e5)}
 function render(){
   const q=$('q').value.trim().toLowerCase(),p=$('pais').value,c=$('cat').value;ls.set('pais',p);
-  document.querySelectorAll('#quick .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===c));
+  document.querySelectorAll('#quick .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===grupo));
   view=all.filter(x=>{
     if(!okKids(x))return false;
     if(!verCaidos&&esCaido(x))return false;
     if(p&&(p==='*fav'?!favs.has(x.url):x.pais!==p))return false;
     if(c&&!x.cats.includes(c))return false;
+    if(grupo&&!enGrupo(x,grupo))return false;
     if(soloLocal&&!local(x))return false;
     const a=ahora(x);if(solo&&!a)return false;
     return !q||x.name.toLowerCase().includes(q)||(a&&a.e[2].toLowerCase().includes(q));
@@ -393,6 +407,7 @@ function playCh(ch,auto){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
   $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();
   if(hls){hls.destroy();hls=null}
+  if(enTele&&!auto){mandarCast(ch);msg(`Se está viendo en la tele: ${ch.name}`);return}
   const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);ls.set('last',ch.url);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
@@ -524,8 +539,12 @@ function tabTo(t){
   if(t==='kdrama')renderKGuia();
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>tabTo(t.dataset.t));
-$('quick').innerHTML=QUICK.map(([c,n])=>`<button class="chip" data-c="${c}" aria-pressed="false">${n}</button>`).join('');
-$('quick').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;$('cat').value=b.dataset.c;if($('cat').selectedIndex<0)$('cat').value='';render()};
+function pintaGrupos(){
+  const vis=all.filter(x=>okKids(x)&&(verCaidos||!esCaido(x)));
+  const n=g=>vis.filter(x=>enGrupo(x,g)).length;
+  $('quick').innerHTML=`<button class="chip" data-g="" aria-pressed="${!grupo}">Todo</button>`+GRUPOS.map(([g,t])=>{const k=n(g);return k?`<button class="chip" data-g="${g}" aria-pressed="${grupo===g}">${t} <span style="opacity:.7">${k}</span></button>`:''}).join('');
+}
+$('quick').onclick=e=>{const b=e.target.closest('[data-g]');if(!b)return;grupo=b.dataset.g;ls.set('grupo',grupo);$('cat').value='';render()};
 grid.addEventListener('click',e=>{
   const f=e.target.closest('[data-f]');
   if(f){e.stopPropagation();const x=view[+f.dataset.f];favs.has(x.url)?favs.delete(x.url):favs.add(x.url);ls.set('favs',[...favs]);render();return}
@@ -619,8 +638,24 @@ async function enviarTele(){
   if(/Android/i.test(navigator.userAgent)&&/^https?:/.test(curCh.url)){location.href=`intent:${curCh.url}#Intent;action=android.intent.action.VIEW;type=application/x-mpegURL;S.title=${enc(curCh.name)};end`;return}
   sheet('No se pudo abrir','<p class="note">En este equipo no hay una app para mandar video a la tele. En Android instala Web Video Caster o LocalCast desde Play Store.</p>',[['Cerrar']]);
 }
+function mandarCast(ch){
+  if(!ch||!PANT?.transmitir)return;
+  PANT.transmitir({url:ch.url,titulo:(ch.num?ch.num+'  ':'')+ch.name}).catch(()=>sheet('No se pudo','<p class="note">Este celular no tiene los servicios de Google para Chromecast. Usa "Duplicar pantalla".</p>',[['Cerrar']]));
+}
+PANT?.addListener?.('tele',d=>{
+  if(d.estado==='enviando'){enTele=true;try{v.pause()}catch(e){}if(hls){hls.destroy();hls=null}
+    $('teleTxt').textContent=`📺 En la tele: ${d.titulo}`;$('teleBar').hidden=false;msg('Se está viendo en la tele. Cambia de canal aquí y cambia allá.')}
+  else if(d.estado==='desconectado'){enTele=false;$('teleBar').hidden=true;msg('Elige un canal para empezar')}
+  else if(d.estado==='fallo'){enTele=false;$('teleBar').hidden=true;sheet('No se conectó','<p class="note">No se pudo conectar con la tele. Revisa que estén en el mismo WiFi.</p>',[['Cerrar']])}
+});
+$('teleStop').onclick=()=>PANT?.detenerTele?.().catch(()=>{});
 $('tele').onclick=()=>{
   if(!curCh){sheet('Primero elige un canal','<p class="note">Pon un canal y luego toca 📺 para mandarlo a tu tele.</p>',[['Cerrar']]);return}
+  if(PANT?.transmitir){
+    sheet('Mandar a la tele',`<p class="note"><b>Chromecast o Google TV:</b> se manda directo, sin otra app, y tu celular queda como control remoto. Algunos canales no abren en Chromecast; si pasa, usa "Duplicar pantalla".</p><p class="note"><b>Roku y otras Smart TV:</b> usa "Duplicar pantalla" de Android: lo que ves en el celular aparece en la tele.</p>`,
+      [['Chromecast / Google TV',()=>mandarCast(curCh),'red'],['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{})],['Con otra app',enviarTele],['Cancelar']]);
+    return;
+  }
   sheet('Mandar a la tele',`<p class="note">Vas a abrir <b>${esc(curCh.name)}</b> en otra app que lo manda a tu tele: Chromecast, Google TV, Roku, Fire TV o Smart TV en el mismo WiFi.</p><p class="note">Si es la primera vez, instala gratis <b>Web Video Caster</b> o <b>LocalCast</b> desde Play Store y elígela en la lista.</p>`,[['Elegir app',enviarTele,'red'],['Cancelar']]);
 };
 

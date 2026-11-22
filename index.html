@@ -122,7 +122,7 @@ video{object-fit:contain}
     <video id="v" controls playsinline controlslist="nofullscreen"></video>
     <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
     <button class="fsb" id="calidad" style="right:58px;width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button>
-    <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
+    <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
   <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
   <div class="epg" id="epg"></div>
@@ -376,7 +376,16 @@ function tile(x){
 }
 
 /* ---------- Reproductor ---------- */
-function msg(t,next){$('msg').hidden=!t;$('msgTxt').textContent=t||'';$('nextBtn').hidden=!next;}
+function msg(t,next,again){$('msg').hidden=!t;$('msgTxt').textContent=t||'';$('nextBtn').hidden=!next;$('againBtn').hidden=!again;$('nextBtn').className=again?'btn':'btn red';}
+/* Reproductor nativo de Android: se le pasa la lista para poder cambiar de canal ahí mismo. */
+function abrirNativo(ch){
+  if(!PANT?.reproducir||!ch)return;probadoNativo.add(ch.url);
+  let lista=view.includes(ch)?view:[ch,...view];const i=lista.indexOf(ch),a=Math.max(0,i-300);
+  lista=lista.slice(a,i+300);
+  PANT.reproducir({lista:lista.map(c=>({url:c.url,nombre:(c.num?c.num+'  ':'')+c.name})),indice:i-a}).catch(()=>{});
+  msg(`${ch.name} se está viendo en el reproductor de Android.`,true,true);ls.set('last',ch.url);
+  recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
+}
 function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.name:'';$('osdP').textContent=a?a.e[2]:'';
   $('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),3500)}
 function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
@@ -387,9 +396,7 @@ function playCh(ch,auto){
   const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);ls.set('last',ch.url);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
-  const nativo=()=>{probadoNativo.add(ch.url);PANT.reproducir({url:ch.url,titulo:(ch.num?ch.num+'  ':'')+ch.name}).catch(()=>{});
-    msg('Abierto en el reproductor de Android. Si tampoco carga, prueba otro canal.',true);ls.set('last',ch.url);
-    recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent()};
+  const nativo=()=>abrirNativo(ch);
   if(PANT?.reproducir&&siempreNativo&&!auto&&!DEMO){if(hls){hls.destroy();hls=null}nativo();return}
   const fail=()=>{if(PANT?.reproducir&&!auto&&!probadoNativo.has(ch.url)){if(hls){hls.destroy();hls=null}nativo();return}
     failed[ch.url]=Date.now();ls.set('failed',failed);
@@ -533,6 +540,14 @@ document.addEventListener('click',e=>{
   const r=e.target.closest('[data-rem]');if(r){const k=r.dataset.rem;if(rems.some(x=>x.k===k))delRem(k);else{const [c,ev]=findRem(k);if(c&&ev)addRem(c,ev)}return}
   const d=e.target.closest('[data-del]');if(d){delRem(d.dataset.del);return}
   const u=e.target.closest('#rec [data-u],#kguia [data-u]');if(u){playCh(all.find(c=>c.url===u.dataset.u))}
+});
+$('againBtn').onclick=()=>abrirNativo(curCh);
+// Al volver del reproductor de Android: quedarse en el canal donde te quedaste, sin aviso de error.
+PANT?.addListener?.('nativoCerrado',d=>{
+  const c=all.find(x=>x.url===d.url);if(!c)return;curCh=c;clearTimeout(skipT);
+  if(hls){hls.destroy();hls=null}try{v.pause()}catch(e){}
+  $('nowName').textContent=(c.num?c.num+'  ':'')+c.name;ls.set('last',c.url);render();showEpg();
+  msg(`${c.name} se ve en el reproductor de Android.`,true,true);
 });
 $('next').onclick=()=>step(1);$('prev').onclick=()=>step(-1);$('nextBtn').onclick=()=>step(1);
 ['q','pais','cat'].forEach(id=>$(id).addEventListener('input',render));

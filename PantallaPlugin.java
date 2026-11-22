@@ -91,16 +91,42 @@ public class PantallaPlugin extends Plugin {
 
     @PluginMethod
     public void reproducir(PluginCall call) {
-        String url = call.getString("url");
-        if (url == null || url.isEmpty()) {
+        JSArray lista = call.getArray("lista");
+        java.util.ArrayList<String> urls = new java.util.ArrayList<>(), nombres = new java.util.ArrayList<>();
+        try {
+            if (lista != null) {
+                for (int i = 0; i < lista.length(); i++) {
+                    org.json.JSONObject o = lista.getJSONObject(i);
+                    urls.add(o.getString("url"));
+                    nombres.add(o.optString("nombre", "Tele Libre"));
+                }
+            }
+        } catch (Exception e) { /* usa lo que haya */ }
+        if (urls.isEmpty()) {
             call.reject("Sin canal");
             return;
         }
+        PlayerActivity.ultima = null;
         Intent i = new Intent(getContext(), PlayerActivity.class);
-        i.putExtra("url", url);
-        i.putExtra("titulo", call.getString("titulo", "Tele Libre"));
+        i.putStringArrayListExtra("urls", urls);
+        i.putStringArrayListExtra("nombres", nombres);
+        int indice = call.getInt("indice", 0);
+        i.putExtra("indice", indice);
         getActivity().startActivity(i);
         call.resolve();
+    }
+
+    /** Al volver del reproductor nativo, avisa a la app en qué canal te quedaste. */
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        String u = PlayerActivity.ultima;
+        if (u != null) {
+            PlayerActivity.ultima = null;
+            JSObject d = new JSObject();
+            d.put("url", u);
+            notifyListeners("nativoCerrado", d);
+        }
     }
 
     @PluginMethod

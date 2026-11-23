@@ -10,10 +10,16 @@
       <Label id="estado" translation="[80,140]" width="1760" font="font:MediumSystemFont" color="0x9AA1AAFF" text="Cargando canales..." />
       <LabelList id="cats" translation="[80,150]" itemSize="[440,72]" numRows="11" vertFocusAnimationStyle="floatingFocus"
         color="0xC8CDD3FF" focusedColor="0x0F1114FF" focusBitmapBlendColor="0xFFFFFFFF" />
+      <Group id="guiaBox" translation="[580,150]" visible="false">
+        <Group id="guiaHoras" />
+        <MarkupList id="guiaLista" translation="[0,50]" itemComponentName="GuiaFila" itemSize="[1260,90]" itemSpacing="[0,6]"
+          numRows="8" vertFocusAnimationStyle="floatingFocus" focusBitmapBlendColor="0xFF3B30FF" />
+        <Rectangle id="guiaLinea" width="3" height="820" color="0xFF3B30FF" />
+      </Group>
       <MarkupList id="lista" translation="[580,150]" itemComponentName="CanalItem" itemSize="[1260,100]" itemSpacing="[0,8]"
         numRows="8" vertFocusAnimationStyle="floatingFocus" focusBitmapBlendColor="0xFF3B30FF" />
       <Label id="ayuda" translation="[80,1010]" width="1760" font="font:SmallSystemFont" color="0x9AA1AAFF"
-        text="OK: ver el canal      Arriba / Abajo (viendo un canal): cambiar      Botón *: favorito      Izquierda / Derecha: categorías y canales" />
+        text="OK: ver el canal      Viendo un canal: Arriba / Abajo cambian, Izquierda abre la lista      Botón *: favorito u ocultar" />
     </Group>
     <Video id="video" width="1920" height="1080" visible="false" />
     <Group id="panel" visible="false">
@@ -27,6 +33,13 @@
       <Rectangle width="1100" height="170" color="0x000000B3" />
       <Label id="osdNombre" translation="[36,22]" width="1030" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
       <Label id="osdProg" translation="[36,100]" width="1030" font="font:MediumSystemFont" color="0xFF6B62FF" />
+    </Group>
+    <Group id="opc" visible="false">
+      <Rectangle width="1920" height="1080" color="0x00000099" />
+      <Rectangle translation="[560,300]" width="800" height="430" color="0x1A1D22FF" />
+      <Label id="opcTitulo" translation="[600,330]" width="720" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+      <LabelList id="opcLista" translation="[600,410]" itemSize="[720,72]" numRows="4" vertFocusAnimationStyle="floatingFocus"
+        color="0xC8CDD3FF" focusedColor="0x0F1114FF" focusBitmapBlendColor="0xFFFFFFFF" />
     </Group>
     <Timer id="osdTimer" duration="4" />
     <Timer id="saltoTimer" duration="2.5" />

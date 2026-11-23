@@ -125,7 +125,7 @@ video{object-fit:contain}
     <div class="tools"><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
-  <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
+  <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="ocultar" aria-label="Ocultar este canal">🚫</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
   <div class="aviso" id="teleBar" hidden style="position:static;border-radius:10px;margin-bottom:8px;background:#1a73e8"><b id="teleTxt"></b><button class="btn sm" id="teleStop">Dejar de transmitir</button></div>
   <div class="epg" id="epg"></div>
 
@@ -194,6 +194,7 @@ video{object-fit:contain}
     </section>
     <section data-adult>
       <h3>Canales</h3>
+      <div id="ocBox" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><p class="note" id="ocTxt" style="flex:1"></p><button class="btn sm" id="ocTodos">Mostrar todos de nuevo</button></div>
       <div id="aquiBox" hidden style="display:grid;gap:8px"><button class="btn red" id="aquiBtn">Revisar canales desde mi celular</button><p class="note" id="aquiTxt" role="status"></p></div>
       <label class="sw"><input type="checkbox" id="verCaidos"> Mostrar también los canales caídos</label>
       <label class="sw" id="nativoBox" hidden><input type="checkbox" id="nativo"> Usar siempre el reproductor de Android</label>
@@ -373,6 +374,7 @@ function render(){
   document.querySelectorAll('#quick .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===grupo));
   view=all.filter(x=>{
     if(!okKids(x))return false;
+    if(ocultos.has(x.url))return false;
     if(!verCaidos&&esCaido(x))return false;
     if(p&&(p==='*fav'?!favs.has(x.url):x.pais!==p))return false;
     if(c&&!x.cats.includes(c))return false;
@@ -429,6 +431,15 @@ function abrirNativo(ch){
 }
 function osd(){const a=curCh&&ahora(curCh);$('osdN').textContent=curCh?curCh.name:'';$('osdP').textContent=a?a.e[2]:'';
   $('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),3500)}
+/* Ocultar canales (letreros, pantalla negra o lo que no quieras ver) */
+let ocultos=new Set(ls.get('ocultos',[]));
+function pintaOcultos(){$('ocBox').hidden=!ocultos.size;$('ocTxt').textContent=`Tienes ${ocultos.size} ${ocultos.size===1?'canal oculto':'canales ocultos'}.`}
+function ocultarCanal(ch){
+  if(!ch)return;ocultos.add(ch.url);ls.set('ocultos',[...ocultos]);pintaOcultos();
+  const i=view.indexOf(ch);render();pintaGrupos();
+  if(curCh===ch){if(view.length)playCh(view[Math.min(Math.max(i,0),view.length-1)]);else{curCh=null;if(hls){hls.destroy();hls=null}msg('Elige un canal para empezar')}}
+  $('osdN').textContent='Canal oculto';$('osdP').textContent=ch.name;$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2500);
+}
 function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
 function playCh(ch,auto){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
@@ -568,7 +579,7 @@ function tabTo(t){
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>tabTo(t.dataset.t));
 function pintaGrupos(){
-  const vis=all.filter(x=>okKids(x)&&(verCaidos||!esCaido(x)));
+  const vis=all.filter(x=>okKids(x)&&!ocultos.has(x.url)&&(verCaidos||!esCaido(x)));
   const n=g=>vis.filter(x=>enGrupo(x,g)).length;
   $('quick').innerHTML=`<button class="chip" data-g="" aria-pressed="${!grupo}">Todo</button>`+GRUPOS.map(([g,t])=>{const k=n(g);return k?`<button class="chip" data-g="${g}" aria-pressed="${grupo===g}">${t} <span style="opacity:.7">${k}</span></button>`:''}).join('');
 }
@@ -589,6 +600,10 @@ document.addEventListener('click',e=>{
   const u=e.target.closest('#rec [data-u],#kguia [data-u]');if(u){playCh(all.find(c=>c.url===u.dataset.u))}
 });
 $('againBtn').onclick=()=>abrirNativo(curCh);
+$('ocultar').onclick=()=>{if(!curCh){sheet('Primero elige un canal','<p class="note">Pon el canal que quieres quitar y luego toca 🚫.</p>',[['Cerrar']]);return}
+  const c=curCh;sheet(`¿Ocultar ${esc(c.name)}?`,'<p class="note">Ya no aparecerá en la lista ni al cambiar de canal. Puedes volver a mostrarlo en Ajustes → Canales.</p>',[['Ocultar',()=>ocultarCanal(c),'red'],['Cancelar']])};
+$('ocTodos').onclick=()=>{ocultos=new Set();ls.set('ocultos',[]);pintaOcultos();render();pintaGrupos()};
+pintaOcultos();
 $('favBtn').onclick=alternaFav;
 // Al volver del reproductor de Android: quedarse en el canal donde te quedaste, sin aviso de error.
 PANT?.addListener?.('nativoCerrado',d=>{
@@ -699,7 +714,7 @@ function marca(k){
 }
 function sintoniza(){
   clearTimeout(marcaT);const n=marcado;marcado='';if(!n)return;
-  const ok=c=>okKids(c)&&(verCaidos||!esCaido(c));
+  const ok=c=>okKids(c)&&!ocultos.has(c.url)&&(verCaidos||!esCaido(c));
   const pick=m=>all.filter(c=>c.num===m&&ok(c)).sort((a,b)=>malo(a)-malo(b))[0];
   const c=pick(n)||(!n.includes('.')&&pick(n+'.1'));
   $('dlg').hidden=true;

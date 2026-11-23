@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="GuiaFila" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="mostrar" />
+  </interface>
+  <script type="text/brightscript"><![CDATA[
+' Una fila de la guía: nombre del canal y sus programas en las próximas 3 horas.
+sub init()
+    m.nombre = m.top.FindNode("nombre")
+    m.bloques = m.top.FindNode("bloques")
+end sub
+
+sub mostrar()
+    c = m.top.itemContent
+    if c = invalid then return
+    m.nombre.text = c.nombre
+    m.bloques.RemoveChildrenIndex(m.bloques.GetChildCount(), 0)
+    if c.progs = invalid then return
+    inicio = c.inicio
+    fin = inicio + 3 * 3600
+    ahora = CreateObject("roDateTime").AsSeconds()
+    for each pr in c.progs
+        a = pr[0]
+        b = pr[1]
+        if b > inicio and a < fin
+            if a < inicio then a = inicio
+            if b > fin then b = fin
+            x = (a - inicio) / 60 * 5.5
+            w = (b - a) / 60 * 5.5 - 4
+            if w > 6
+                r = CreateObject("roSGNode", "Rectangle")
+                r.translation = [x, 5]
+                r.width = w
+                r.height = 80
+                if pr[0] <= ahora and pr[1] > ahora
+                    r.color = "0x5A2320FF"
+                else
+                    r.color = "0x23272EFF"
+                end if
+                m.bloques.AppendChild(r)
+                if w > 40
+                    l = CreateObject("roSGNode", "Label")
+                    l.translation = [x + 10, 5]
+                    l.width = w - 20
+                    l.height = 80
+                    l.vertAlign = "center"
+                    l.wrap = true
+                    l.maxLines = 2
+                    l.font = "font:SmallSystemFont"
+                    l.color = "0xFFFFFFFF"
+                    l.text = pr[2]
+                    m.bloques.AppendChild(l)
+                end if
+            end if
+        end if
+    end for
+end sub
+  ]]></script>
+  <children>
+    <Label id="nombre" translation="[10,0]" width="240" height="90" vertAlign="center" wrap="true" maxLines="2" font="font:SmallBoldSystemFont" color="0xFFFFFFFF" />
+    <Group id="bloques" translation="[260,0]" />
+  </children>
+</component>

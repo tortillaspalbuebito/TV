@@ -8,6 +8,7 @@ sub init()
     m.num = m.top.FindNode("num")
     m.nombre = m.top.FindNode("nombre")
     m.ahora = m.top.FindNode("ahora")
+    m.logo = m.top.FindNode("logo")
 end sub
 
 sub mostrar()
@@ -16,11 +17,13 @@ sub mostrar()
     m.num.text = c.num
     m.nombre.text = c.nombre
     m.ahora.text = c.ahora
+    m.logo.uri = c.logo
 end sub
   ]]></script>
   <children>
-    <Label id="num" translation="[20,0]" width="120" height="100" vertAlign="center" font="font:SmallBoldSystemFont" color="0x9AA1AAFF" />
-    <Label id="nombre" translation="[140,10]" width="620" height="46" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
-    <Label id="ahora" translation="[140,56]" width="620" height="36" font="font:SmallSystemFont" color="0xFF6B62FF" />
+    <Label id="num" translation="[16,0]" width="110" height="100" vertAlign="center" font="font:SmallBoldSystemFont" color="0x9AA1AAFF" />
+    <Poster id="logo" translation="[128,16]" width="100" height="68" loadDisplayMode="scaleToFit" loadWidth="100" loadHeight="68" />
+    <Label id="nombre" translation="[244,10]" width="520" height="46" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+    <Label id="ahora" translation="[244,56]" width="520" height="36" font="font:SmallSystemFont" color="0xFF6B62FF" />
   </children>
 </component>

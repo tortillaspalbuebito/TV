@@ -10,6 +10,48 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 
 M3U = "https://iptv-org.github.io/iptv/languages/spa.m3u"
+PAISES_LATAM = ["mx", "ar", "co", "cl", "pe", "ve", "ec", "gt", "cu", "bo", "do", "hn", "py", "sv", "ni", "cr", "pa", "uy", "pr"]
+
+
+def prioridad(pais):
+    """Orden de la lista: México, Latinoamérica, EE. UU. (en español), otros, España."""
+    if pais == "mx": return 0
+    if pais in PAISES_LATAM: return 1
+    if pais == "us": return 2
+    if pais == "es": return 4
+    return 3
+
+
+def lista_completa(spa_text):
+    """La lista en español + los canales latinos que no tienen idioma registrado."""
+    import csv
+    try:
+        idioma = {}
+        for f in csv.DictReader(io.StringIO(get(DB + "feeds.csv").decode())):
+            idioma[f["channel"] + "@" + f["id"]] = f.get("languages", "")
+            if f.get("is_main") == "TRUE":
+                idioma.setdefault(f["channel"], f.get("languages", ""))
+    except Exception as e:
+        print("sin idiomas", e)
+        return spa_text
+    vistos = {l.strip() for l in spa_text.splitlines() if l.strip() and not l.startswith("#")}
+    extra, n = [], 0
+    for c in PAISES_LATAM:
+        try:
+            txt = get(f"https://iptv-org.github.io/iptv/countries/{c}.m3u").decode("utf-8", "replace").splitlines()
+        except Exception as e:
+            print("sin país", c, e); continue
+        for i, l in enumerate(txt):
+            if not l.startswith("#EXTINF") or i + 1 >= len(txt): continue
+            url = txt[i + 1].strip()
+            if not url or url.startswith("#") or url in vistos: continue
+            tid = (re.search(r'tvg-id="([^"]*)"', l) or [None, ""])[1]
+            langs = idioma.get(tid) or idioma.get(tid.split("@")[0], "")
+            if langs and "spa" not in langs.split(";"): continue
+            vistos.add(url); extra += [l, url]; n += 1
+    print(f"lista: {n} canales latinos agregados a la lista en español")
+    return spa_text.rstrip() + "\n" + "\n".join(extra) + "\n"
+
 # Guías XMLTV gratuitas por país (si alguna falla, se salta).
 EPGS = [f"https://epgshare01.online/epgshare01/epg_ripper_{p}1.xml.gz"
         for p in ["MX", "ES", "AR", "CO", "CL", "PE", "US_LOCALS", "DO", "UY", "EC", "CR"]]
@@ -294,7 +336,7 @@ def para_roku(m3u_text, g, html, now=None):
         if line.startswith("#EXTINF"):
             a = dict(re.findall(r'([\w-]+)="([^"]*)"', line))
             meta = dict(name=line.rsplit(",", 1)[-1].strip() or a.get("tvg-name", "Canal"),
-                        id=a.get("tvg-id", ""), grp=a.get("group-title", "Undefined"))
+                        id=a.get("tvg-id", ""), grp=a.get("group-title", "Undefined"), logo=a.get("tvg-logo", ""))
         elif line and not line.startswith("#") and meta:
             meta["url"], meta["pais"] = line, country(meta["id"])
             canales.append(meta); meta = None
@@ -313,7 +355,7 @@ def para_roku(m3u_text, g, html, now=None):
                 and re.match(r"^https?://\d+\.\d+\.\d+\.\d+", x["url"]))
     canales = [x for x in canales if not re.search(r"xxx|adult", x["grp"] + x["name"], re.I)
                and not es_pago(x) and not es_retrans(x)]
-    canales.sort(key=lambda x: (x["pais"] != "mx", sin_acentos(x["name"])))
+    canales.sort(key=lambda x: (prioridad(x["pais"]), sin_acentos(x["name"])))
     # números: los abiertos con su número de siempre, el resto del 100 en adelante
     ident = lambda x: norm(id_base(x["id"])) if x["id"] else clean_name(x["name"]) + "|" + x["pais"]
     nums, n = {}, 100
@@ -341,13 +383,15 @@ def para_roku(m3u_text, g, html, now=None):
                 idx[ref] = len(progs) if pr else -1
                 if pr: progs.append(pr)
             p = idx[ref]
-        salida.append({"n": x["num"], "t": x["name"], "u": x["url"], "g": grupos, "p": p, "e": g.get("e", {}).get(app_key(x["id"], x["name"]), "")})
+        salida.append({"n": x["num"], "t": x["name"], "u": x["url"], "l": x["logo"], "g": grupos, "p": p, "e": g.get("e", {}).get(app_key(x["id"], x["name"]), "")})
     return {"u": now, "grupos": [[k, t] for k, t, _ in R["grupos"]], "c": salida, "p": progs}
 
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "guia.json"
-    m3u = get(M3U).decode("utf-8", "replace")
+    m3u = lista_completa(get(M3U).decode("utf-8", "replace"))
+    with open("lista.m3u", "w", encoding="utf-8") as f:
+        f.write(m3u)
     blobs = []
     for u in EPGS:
         try:

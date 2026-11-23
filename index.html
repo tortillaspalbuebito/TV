@@ -218,7 +218,11 @@ const DEMO=window.TL_DEMO||null;
 const APP=!!window.TL_APP; // true dentro del APK
 const LN=window.Capacitor?.Plugins?.LocalNotifications||null;
 const PANT=window.Capacitor?.Plugins?.Pantalla||null,AppP=window.Capacitor?.Plugins?.App||null;
-const DEF='https://iptv-org.github.io/iptv/languages/spa.m3u';
+// Lista armada en el repositorio (español + canales latinos); si no hay, la de iptv-org.
+const RESPALDO='https://iptv-org.github.io/iptv/languages/spa.m3u';
+const DEF=window.TL_REPO?`https://raw.githubusercontent.com/${window.TL_REPO}/main/lista.m3u`:RESPALDO;
+const LATAM=new Set(['ar','co','cl','pe','ve','ec','gt','cu','bo','do','hn','py','sv','ni','cr','pa','uy','pr']);
+const prioridad=p=>p==='mx'?0:LATAM.has(p)?1:p==='us'?2:p==='es'?4:3;
 const PAISES={mx:'México',ar:'Argentina',es:'España',co:'Colombia',cl:'Chile',pe:'Perú',ve:'Venezuela',us:'Estados Unidos',ec:'Ecuador',gt:'Guatemala',cr:'Costa Rica',pa:'Panamá',do:'Rep. Dominicana',uy:'Uruguay',py:'Paraguay',bo:'Bolivia',hn:'Honduras',sv:'El Salvador',ni:'Nicaragua',cu:'Cuba',pr:'Puerto Rico',kr:'Corea'};
 const CATS={general:'General',news:'Noticias',entertainment:'Entretenimiento',movies:'Películas',series:'Series y novelas',sports:'Deportes',kids:'Infantil',music:'Música',documentary:'Documentales',religious:'Religión',lifestyle:'Estilo de vida',cooking:'Cocina',culture:'Cultura',education:'Educación',comedy:'Comedia',classic:'Clásicos',family:'Familia',animation:'Animación',business:'Negocios',travel:'Viajes',science:'Ciencia',outdoor:'Aire libre',shop:'Compras',weather:'Clima',legislative:'Legislativo',public:'Público',relax:'Relajación',auto:'Autos',undefined:'Otros'};
 // Botones de categoría: cada uno junta varias categorías parecidas.
@@ -287,9 +291,9 @@ function parse(txt){
 }
 async function load(){
   if(DEMO){setList(DEMO.channels);return}
-  const src=ls.get('src',DEF);$('m3u').value=src;$('count').textContent='Cargando canales…';
+  let src=ls.get('src',DEF);if(src===RESPALDO)src=DEF;$('m3u').value=src;$('count').textContent='Cargando canales…';
   const own=ls.get('custom',null);if(own){setList(parse(own));return}
-  try{const r=await fetch(src);if(!r.ok)throw 0;const t=await r.text();setList(parse(t));try{localStorage.setItem('lastList',t)}catch(e){}}
+  try{let r=await fetch(src).catch(()=>null);if((!r||!r.ok)&&src!==RESPALDO)r=await fetch(RESPALDO);if(!r.ok)throw 0;const t=await r.text();setList(parse(t));try{localStorage.setItem('lastList',t)}catch(e){}}
   catch(e){try{const t=localStorage.getItem('lastList');if(t){setList(parse(t));return}}catch(e2){}
     $('count').textContent='No se pudo cargar la lista. Revisa tu conexión o cambia la lista en Ajustes.';}
 }
@@ -319,7 +323,7 @@ function numerar(){
 function setList(list){
   const antes=list.length;list=list.filter(x=>!esPago(x));pagados=antes-list.length;
   const antes2=list.length;list=list.filter(x=>!esRetrans(x));noOficiales=antes2-list.length;
-  all=list.sort((a,b)=>(b.pais==='mx')-(a.pais==='mx')||a.name.localeCompare(b.name,'es'));
+  all=list.sort((a,b)=>prioridad(a.pais)-prioridad(b.pais)||a.name.localeCompare(b.name,'es'));
   const ps=[...new Set(all.map(c=>c.pais))].sort((a,b)=>(PAISES[a]||a||'zz').localeCompare(PAISES[b]||b||'zz','es'));
   $('pais').innerHTML='<option value="">Todos los países</option><option value="*fav">★ Favoritos</option>'+ps.map(p=>`<option value="${esc(p)}">${esc(PAISES[p]||p.toUpperCase()||'Otro')}</option>`).join('');
   const cs=[...new Set(all.flatMap(c=>c.cats))].sort((a,b)=>(CATS[a]||a).localeCompare(CATS[b]||b,'es'));

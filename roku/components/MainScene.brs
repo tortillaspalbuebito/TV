@@ -31,6 +31,7 @@ sub init()
     m.vista = []
     m.grupos = []
     m.cur = -1
+    m.curUrl = ""
     m.fallos = 0
 
     m.cats.ObserveField("itemFocused", "alCambiarCategoria")
@@ -134,6 +135,9 @@ sub filtrar(k as string)
     end for
     m.lista.content = cont
     m.cur = -1
+    for i = 0 to m.vista.Count() - 1
+        if m.vista[i].u = m.curUrl then m.cur = i
+    end for
 end sub
 
 ' Programa que va en este momento
@@ -172,7 +176,9 @@ sub reproducir(i as integer)
     if i >= m.vista.Count() then i = m.vista.Count() - 1
     m.cur = i
     c = m.vista[i]
+    m.curUrl = c.u
     m.saltoTimer.control = "stop"
+    m.video.control = "stop"
     contenido = CreateObject("roSGNode", "ContentNode")
     contenido.url = c.u
     contenido.title = c.t
@@ -211,13 +217,22 @@ end sub
 sub cambiarCanal(d as integer)
     n = m.vista.Count()
     if n = 0 then return
+    if m.cur < 0 or m.cur >= n
+        m.cur = 0
+        for i = 0 to n - 1
+            if m.vista[i].u = m.curUrl then m.cur = i
+        end for
+    end if
     reproducir((m.cur + d + n) mod n)
 end sub
 
 sub alCambiarEstadoVideo()
     s = m.video.state
-    if s = "playing"
+    if s = "buffering"
+        if m.cur >= 0 and m.cur < m.vista.Count() then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, "Cargando...")
+    else if s = "playing"
         m.fallos = 0
+        if m.cur >= 0 and m.cur < m.vista.Count() then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, programaAhora(m.vista[m.cur]))
     else if s = "error"
         m.fallos = m.fallos + 1
         if m.fallos <= 5 and m.vista.Count() > 1
@@ -293,10 +308,10 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
         if tecla = "left"
             abrirPanel()
             return true
-        else if tecla = "up"
+        else if tecla = "up" or tecla = "fastforward"
             cambiarCanal(1)
             return true
-        else if tecla = "down"
+        else if tecla = "down" or tecla = "rewind"
             cambiarCanal(-1)
             return true
         else if tecla = "back"

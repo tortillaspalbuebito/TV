@@ -40,6 +40,8 @@ sub init()
 
     m.cats.visible = false
     m.lista.visible = false
+    ' El reproductor no debe quedarse con las teclas del control: las maneja la app.
+    m.video.enableUI = false
 
     m.tarea = CreateObject("roSGNode", "CargaTask")
     m.tarea.url = "https://raw.githubusercontent.com/__REPO__/main/roku.json"
@@ -176,7 +178,7 @@ sub reproducir(i as integer)
     m.video.content = contenido
     m.video.visible = true
     m.menu.visible = false
-    m.video.SetFocus(true)
+    m.top.SetFocus(true)
     m.video.control = "play"
     m.reg.Write("ultima", c.u)
     m.reg.Flush()
@@ -269,11 +271,18 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
         else if tecla = "options"
             if m.cur >= 0 then alternarFavorito(m.vista[m.cur])
             return true
-        else if tecla = "OK"
+        else if tecla = "OK" or tecla = "left" or tecla = "right"
             if m.cur >= 0 then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, programaAhora(m.vista[m.cur]))
-            return false
+            return true
+        else if tecla = "play"
+            if m.video.state = "paused"
+                m.video.control = "resume"
+            else
+                m.video.control = "pause"
+            end if
+            return true
         end if
-        return false
+        return true
     end if
     if tecla = "right" and m.cats.HasFocus()
         m.lista.SetFocus(true)

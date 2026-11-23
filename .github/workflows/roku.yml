@@ -1,0 +1,38 @@
+name: Empaquetar app de Roku
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - roku/**
+      - .github/workflows/roku.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  roku:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Armar el .zip para instalar en Roku
+        run: |
+          cd roku
+          sed -i "s#__BUILD__#${GITHUB_RUN_NUMBER}#" manifest
+          sed -i "s#__REPO__#${GITHUB_REPOSITORY}#" components/MainScene.brs
+          grep -n "raw.githubusercontent" components/MainScene.brs
+          zip -r ../TeleLibreRoku.zip manifest source components images
+          cd .. && unzip -l TeleLibreRoku.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeleLibreRoku
+          path: TeleLibreRoku.zip
+      - name: Publicar para descargar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: roku-${{ github.run_number }}
+          name: Tele Libre para Roku ${{ github.run_number }}
+          body: Descarga TeleLibreRoku.zip y súbelo a tu Roku en modo desarrollador.
+          files: TeleLibreRoku.zip
+          make_latest: false

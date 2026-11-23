@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CanalItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="mostrar" />
+  </interface>
+  <script type="text/brightscript"><![CDATA[
+sub init()
+    m.num = m.top.FindNode("num")
+    m.nombre = m.top.FindNode("nombre")
+    m.ahora = m.top.FindNode("ahora")
+    m.fav = m.top.FindNode("fav")
+end sub
+
+sub mostrar()
+    c = m.top.itemContent
+    if c = invalid then return
+    m.num.text = c.num
+    m.nombre.text = c.nombre
+    m.ahora.text = c.ahora
+    if c.fav = true
+        m.fav.text = "Favorito"
+    else
+        m.fav.text = ""
+    end if
+end sub
+  ]]></script>
+  <children>
+    <Label id="num" translation="[24,0]" width="150" height="100" vertAlign="center" font="font:MediumBoldSystemFont" color="0x9AA1AAFF" />
+    <Label id="nombre" translation="[180,10]" width="900" height="46" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+    <Label id="ahora" translation="[180,56]" width="900" height="36" font="font:SmallSystemFont" color="0xFF6B62FF" />
+    <Label id="fav" translation="[1090,0]" width="160" height="100" vertAlign="center" horizAlign="right" font="font:SmallBoldSystemFont" color="0xF5B301FF" />
+  </children>
+</component>

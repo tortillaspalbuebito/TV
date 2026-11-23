@@ -1,0 +1,11 @@
+title=Tele Libre
+major_version=1
+minor_version=0
+build_version=__BUILD__
+mm_icon_focus_hd=pkg:/images/icono_hd.png
+mm_icon_focus_fhd=pkg:/images/icono_fhd.png
+splash_screen_fhd=pkg:/images/inicio_fhd.png
+splash_screen_hd=pkg:/images/inicio_fhd.png
+splash_color=#0F1114
+splash_min_time=800
+ui_resolutions=fhd

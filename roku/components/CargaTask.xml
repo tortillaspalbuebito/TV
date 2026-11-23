@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CargaTask" extends="Task">
+  <interface>
+    <field id="url" type="string" />
+    <field id="resultado" type="assocarray" />
+    <field id="error" type="string" />
+  </interface>
+  <script type="text/brightscript"><![CDATA[
+sub init()
+    m.top.functionName = "cargar"
+end sub
+
+sub cargar()
+    t = CreateObject("roUrlTransfer")
+    t.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    t.InitClientCertificates()
+    t.EnableEncodings(true)
+    t.SetUrl(m.top.url)
+    texto = t.GetToString()
+    if texto = invalid or texto = ""
+        m.top.error = "No se pudo descargar la lista de canales."
+        return
+    end if
+    datos = ParseJson(texto)
+    if datos = invalid
+        m.top.error = "La lista de canales viene dañada."
+        return
+    end if
+    m.top.resultado = datos
+end sub
+  ]]></script>
+</component>

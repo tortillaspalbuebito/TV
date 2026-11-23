@@ -262,6 +262,89 @@ def caidos(urls, hilos=40):
     return [u for u, r in zip(urls, res) if r == "caido"]
 
 
+# ---------------------------------------------------------------------------
+# Datos para la app de Roku: la misma lista que ve el celular (mismos filtros,
+# números y categorías, tomados de index.html para no tener dos versiones).
+# ---------------------------------------------------------------------------
+def reglas_de_la_app(html):
+    def lista(nombre):
+        m = re.search(r"const " + nombre + r"=(\[.*?\]);", html, re.S)
+        return json.loads(m.group(1).replace("'", '"'))
+    def regex(nombre):
+        m = re.search(r"const " + nombre + r"=/(.*?)/(i?);", html)
+        return re.compile(m.group(1), re.I if m.group(2) else 0)
+    num = dict(re.findall(r"(\w+):'([\d.]+)'", re.search(r"const NUM_MX=\{(.*?)\};", html).group(1)))
+    grupos = json.loads(re.search(r"const GRUPOS=(\[.*?\]\]);", html, re.S).group(1).replace("'", '"'))
+    pistas = [(k, re.compile(p.replace("\\/", "/"))) for k, p in
+              re.findall(r"\['(\w+)',/(.*?)/\]", re.search(r"const PISTAS=\[(.*?)\];\n", html, re.S).group(1))]
+    return dict(pago=lista("PAGO"), corto=regex("PAGO_CORTO"), gratis=regex("GRATIS"),
+                redes=regex("REDES"), num=num, grupos=grupos, pistas=pistas)
+
+
+def sin_acentos(s):
+    return unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+
+
+def para_roku(m3u_text, g, html, now=None):
+    R = reglas_de_la_app(html)
+    now = int(now or time.time())
+    canales, meta = [], None
+    for line in m3u_text.splitlines():
+        line = line.strip()
+        if line.startswith("#EXTINF"):
+            a = dict(re.findall(r'([\w-]+)="([^"]*)"', line))
+            meta = dict(name=line.rsplit(",", 1)[-1].strip() or a.get("tvg-name", "Canal"),
+                        id=a.get("tvg-id", ""), grp=a.get("group-title", "Undefined"))
+        elif line and not line.startswith("#") and meta:
+            meta["url"], meta["pais"] = line, country(meta["id"])
+            canales.append(meta); meta = None
+    def sin_par(s): return re.sub(r"\(.*?\)|\[.*?\]", " ", s)
+    def palabras(x):
+        base = re.sub(r"\.[a-z]{2}$", "", id_base(x["id"]), flags=re.I)
+        base = re.sub(r"(?<=[a-z])(?=[A-Z0-9])", " ", base)
+        return [w for w in re.split(r"[^a-z0-9]+", sin_acentos(sin_par(x["name"]) + " " + base)) if w]
+    def es_pago(x):
+        if R["gratis"].search(x["url"]) or re.search(r" by ", x["name"], re.I): return False
+        if any(R["corto"].match(w) for w in palabras(x)): return True
+        s = norm(sin_par(x["name"])) + " " + norm(id_base(x["id"]))
+        return any(p in s for p in R["pago"])
+    def es_retrans(x):
+        return (x["pais"] == "mx" and R["redes"].match(norm(re.sub(r"\.mx$", "", id_base(x["id"]), flags=re.I)) or "")
+                and re.match(r"^https?://\d+\.\d+\.\d+\.\d+", x["url"]))
+    canales = [x for x in canales if not re.search(r"xxx|adult", x["grp"] + x["name"], re.I)
+               and not es_pago(x) and not es_retrans(x)]
+    canales.sort(key=lambda x: (x["pais"] != "mx", sin_acentos(x["name"])))
+    # números: los abiertos con su número de siempre, el resto del 100 en adelante
+    ident = lambda x: norm(id_base(x["id"])) if x["id"] else clean_name(x["name"]) + "|" + x["pais"]
+    nums, n = {}, 100
+    for x in canales:
+        k = x["pais"] == "mx" and R["num"].get(norm(re.sub(r"\.mx$", "", id_base(x["id"]), flags=re.I)))
+        if k: x["num"] = k
+    for x in canales:
+        if "num" not in x:
+            i = ident(x)
+            if i not in nums: nums[i] = str(n); n += 1
+            x["num"] = nums[i]
+    muertos, progs, salida, idx = set(g.get("x", [])), [], [], {}
+    for x in canales:
+        if x["url"] in muertos: continue
+        cats = {c.strip().lower() for c in x["grp"].split(";") if c.strip()} - {"general", "undefined"}
+        s = " " + sin_acentos(x["name"]) + " "
+        cats |= {k for k, rx in R["pistas"] if rx.search(s)}
+        cats = cats or {"general"}
+        grupos = [k for k, _, ks in R["grupos"] if cats & set(ks)]
+        p = -1
+        ref = g["k"].get(app_key(x["id"], x["name"]))
+        if ref is not None:
+            if ref not in idx:
+                pr = [[a, b, t] for a, b, t, *_ in g["c"][ref] if b > now - 7200 and a < now + 12 * 3600]
+                idx[ref] = len(progs) if pr else -1
+                if pr: progs.append(pr)
+            p = idx[ref]
+        salida.append({"n": x["num"], "t": x["name"], "u": x["url"], "g": grupos, "p": p, "e": g.get("e", {}).get(app_key(x["id"], x["name"]), "")})
+    return {"u": now, "grupos": [[k, t] for k, t, _ in R["grupos"]], "c": salida, "p": progs}
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "guia.json"
     m3u = get(M3U).decode("utf-8", "replace")
@@ -279,6 +362,13 @@ def main():
         json.dump(g, f, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(g['c'])} canales con guía, {len(g['k'])} claves, "
           f"{len(g['x'])} de {len(urls)} señales caídas, {len(g['e'])} canales locales -> {out}")
+    try:
+        r = para_roku(m3u, g, open("index.html", encoding="utf-8").read())
+        with open("roku.json", "w", encoding="utf-8") as f:
+            json.dump(r, f, ensure_ascii=False, separators=(",", ":"))
+        print(f"roku.json: {len(r['c'])} canales, {len(r['p'])} con programación")
+    except Exception as e:
+        print("no se pudo generar roku.json:", e)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ sub init()
     m.osdTimer = m.top.FindNode("osdTimer")
     m.saltoTimer = m.top.FindNode("saltoTimer")
     m.refresco = m.top.FindNode("refresco")
+    m.panel = m.top.FindNode("panel")
+    m.panelLista = m.top.FindNode("panelLista")
 
     m.reg = CreateObject("roRegistrySection", "telelibre")
     m.favs = {}
@@ -33,6 +35,7 @@ sub init()
 
     m.cats.ObserveField("itemFocused", "alCambiarCategoria")
     m.lista.ObserveField("itemSelected", "alElegirCanal")
+    m.panelLista.ObserveField("itemSelected", "alElegirEnPanel")
     m.video.ObserveField("state", "alCambiarEstadoVideo")
     m.osdTimer.ObserveField("fire", "ocultarOsd")
     m.saltoTimer.ObserveField("fire", "saltarAlSiguiente")
@@ -178,11 +181,31 @@ sub reproducir(i as integer)
     m.video.content = contenido
     m.video.visible = true
     m.menu.visible = false
+    m.panel.visible = false
     m.top.SetFocus(true)
     m.video.control = "play"
     m.reg.Write("ultima", c.u)
     m.reg.Flush()
     mostrarOsd(c.n + "   " + c.t, programaAhora(c))
+end sub
+
+' Panel de canales a un lado, sin quitar el video
+sub abrirPanel()
+    if m.lista.content = invalid then return
+    m.panelLista.content = m.lista.content
+    m.panel.visible = true
+    m.osd.visible = false
+    if m.cur >= 0 then m.panelLista.jumpToItem = m.cur
+    m.panelLista.SetFocus(true)
+end sub
+
+sub cerrarPanel()
+    m.panel.visible = false
+    m.top.SetFocus(true)
+end sub
+
+sub alElegirEnPanel()
+    reproducir(m.panelLista.itemSelected)
 end sub
 
 sub cambiarCanal(d as integer)
@@ -228,6 +251,7 @@ sub volverALista()
     m.video.control = "stop"
     m.video.visible = false
     m.osd.visible = false
+    m.panel.visible = false
     m.menu.visible = true
     if m.cur >= 0 and m.cur < m.vista.Count() then m.lista.jumpToItem = m.cur
     m.lista.SetFocus(true)
@@ -258,8 +282,18 @@ end sub
 
 function onKeyEvent(tecla as string, presionada as boolean) as boolean
     if not presionada then return false
+    if m.video.visible and m.panel.visible
+        if tecla = "back" or tecla = "right"
+            cerrarPanel()
+            return true
+        end if
+        return true
+    end if
     if m.video.visible
-        if tecla = "up"
+        if tecla = "left"
+            abrirPanel()
+            return true
+        else if tecla = "up"
             cambiarCanal(1)
             return true
         else if tecla = "down"
@@ -271,7 +305,7 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
         else if tecla = "options"
             if m.cur >= 0 then alternarFavorito(m.vista[m.cur])
             return true
-        else if tecla = "OK" or tecla = "left" or tecla = "right"
+        else if tecla = "OK" or tecla = "right"
             if m.cur >= 0 then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, programaAhora(m.vista[m.cur]))
             return true
         else if tecla = "play"

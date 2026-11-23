@@ -16,6 +16,13 @@
         text="OK: ver el canal      Arriba / Abajo (viendo un canal): cambiar      Botón *: favorito      Izquierda / Derecha: categorías y canales" />
     </Group>
     <Video id="video" width="1920" height="1080" visible="false" />
+    <Group id="panel" visible="false">
+      <Rectangle width="860" height="1080" color="0x0F1114E6" />
+      <Label text="Canales" translation="[50,40]" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
+      <MarkupList id="panelLista" translation="[40,120]" itemComponentName="PanelItem" itemSize="[780,100]" itemSpacing="[0,6]"
+        numRows="8" vertFocusAnimationStyle="floatingFocus" focusBitmapBlendColor="0xFF3B30FF" />
+      <Label text="OK: ver      Regresar o Derecha: cerrar" translation="[50,1010]" width="780" font="font:SmallSystemFont" color="0x9AA1AAFF" />
+    </Group>
     <Group id="osd" visible="false" translation="[80,60]">
       <Rectangle width="1100" height="170" color="0x000000B3" />
       <Label id="osdNombre" translation="[36,22]" width="1030" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />

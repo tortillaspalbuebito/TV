@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PanelItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="mostrar" />
+  </interface>
+  <script type="text/brightscript"><![CDATA[
+sub init()
+    m.num = m.top.FindNode("num")
+    m.nombre = m.top.FindNode("nombre")
+    m.ahora = m.top.FindNode("ahora")
+end sub
+
+sub mostrar()
+    c = m.top.itemContent
+    if c = invalid then return
+    m.num.text = c.num
+    m.nombre.text = c.nombre
+    m.ahora.text = c.ahora
+end sub
+  ]]></script>
+  <children>
+    <Label id="num" translation="[20,0]" width="120" height="100" vertAlign="center" font="font:SmallBoldSystemFont" color="0x9AA1AAFF" />
+    <Label id="nombre" translation="[140,10]" width="620" height="46" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
+    <Label id="ahora" translation="[140,56]" width="620" height="36" font="font:SmallSystemFont" color="0xFF6B62FF" />
+  </children>
+</component>

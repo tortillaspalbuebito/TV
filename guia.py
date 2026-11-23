@@ -379,12 +379,39 @@ def para_roku(m3u_text, g, html, now=None):
         ref = g["k"].get(app_key(x["id"], x["name"]))
         if ref is not None:
             if ref not in idx:
-                pr = [[a, b, t] for a, b, t, *_ in g["c"][ref] if b > now - 7200 and a < now + 12 * 3600]
+                pr = [[a, b, t, (r[0] if r else "")] for a, b, t, *r in g["c"][ref] if b > now - 7200 and a < now + 12 * 3600]
                 idx[ref] = len(progs) if pr else -1
                 if pr: progs.append(pr)
             p = idx[ref]
         salida.append({"n": x["num"], "t": x["name"], "u": x["url"], "l": x["logo"], "g": grupos, "p": p, "e": g.get("e", {}).get(app_key(x["id"], x["name"]), "")})
     return {"u": now, "grupos": [[k, t] for k, t, _ in R["grupos"]], "c": salida, "p": progs}
+
+
+RADIO_API = "https://de1.api.radio-browser.info/json/stations/search"
+
+
+def radios():
+    """Estaciones de radio en vivo (sus propias señales), primero México y luego Latinoamérica."""
+    from urllib.parse import urlencode
+    out, vistos = [], set()
+    for cc in ["mx"] + [p for p in PAISES_LATAM if p != "mx"]:
+        q = urlencode(dict(countrycode=cc.upper(), hidebroken="true", order="clickcount", reverse="true",
+                           limit=150 if cc == "mx" else 25))
+        try:
+            datos = json.loads(get(RADIO_API + "?" + q))
+        except Exception as e:
+            print("sin radios", cc, e); continue
+        for r in datos:
+            u = (r.get("url_resolved") or r.get("url") or "").strip()
+            codec = (r.get("codec") or "").upper()
+            if not u or u in vistos or codec not in ("MP3", "AAC", "AAC+") and ".m3u8" not in u:
+                continue
+            vistos.add(u)
+            out.append({"t": r.get("name", "").strip()[:60], "u": u, "l": r.get("favicon", ""),
+                        "pais": cc, "c": "hls" if ".m3u8" in u else ("mp3" if codec == "MP3" else "aac"),
+                        "g": ", ".join((r.get("tags") or "").split(",")[:2])})
+    print(f"radios: {len(out)} estaciones")
+    return out
 
 
 def main():
@@ -406,8 +433,12 @@ def main():
         json.dump(g, f, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(g['c'])} canales con guía, {len(g['k'])} claves, "
           f"{len(g['x'])} de {len(urls)} señales caídas, {len(g['e'])} canales locales -> {out}")
+    rad = radios()
+    with open("radios.json", "w", encoding="utf-8") as f:
+        json.dump(rad, f, ensure_ascii=False, separators=(",", ":"))
     try:
         r = para_roku(m3u, g, open("index.html", encoding="utf-8").read())
+        r["r"] = rad
         with open("roku.json", "w", encoding="utf-8") as f:
             json.dump(r, f, ensure_ascii=False, separators=(",", ":"))
         print(f"roku.json: {len(r['c'])} canales, {len(r['p'])} con programación")

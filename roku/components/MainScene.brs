@@ -22,6 +22,15 @@ sub init()
     m.opc = m.top.FindNode("opc")
     m.opcTitulo = m.top.FindNode("opcTitulo")
     m.opcLista = m.top.FindNode("opcLista")
+    m.audio = m.top.FindNode("audio")
+    m.radioBox = m.top.FindNode("radioBox")
+    m.radioLogo = m.top.FindNode("radioLogo")
+    m.radioNombre = m.top.FindNode("radioNombre")
+    m.radioInfo = m.top.FindNode("radioInfo")
+    m.osdDesc = m.top.FindNode("osdDesc")
+    m.osdFondo = m.top.FindNode("osdFondo")
+    m.reloj = m.top.FindNode("reloj")
+    m.relojTimer = m.top.FindNode("relojTimer")
 
     m.reg = CreateObject("roRegistrySection", "telelibre")
     m.favs = leerMapa("favs")
@@ -42,6 +51,16 @@ sub init()
     m.curUrl = ""
     m.fallos = 0
     m.armando = false
+    m.viendo = false
+    m.radios = []
+    m.recientes = []
+    t = m.reg.Read("recientes")
+    if t <> ""
+        r = ParseJson(t)
+        if r <> invalid then m.recientes = r
+    end if
+    m.cc = (m.reg.Read("cc") = "1")
+    if m.cc then m.video.globalCaptionMode = "On"
 
     m.cats.ObserveField("itemFocused", "alCambiarCategoria")
     m.lista.ObserveField("itemSelected", "alElegirCanal")
@@ -52,6 +71,10 @@ sub init()
     m.osdTimer.ObserveField("fire", "ocultarOsd")
     m.saltoTimer.ObserveField("fire", "saltarAlSiguiente")
     m.refresco.ObserveField("fire", "actualizarAhora")
+    m.relojTimer.ObserveField("fire", "actualizarReloj")
+    m.audio.ObserveField("state", "alCambiarEstadoAudio")
+    actualizarReloj()
+    m.relojTimer.control = "start"
 
     m.cats.visible = false
     m.lista.visible = false
@@ -89,6 +112,10 @@ sub guardarMapa(clave as string, mapa as object)
     m.reg.Flush()
 end sub
 
+function esRadio(c as object) as boolean
+    return c <> invalid and c.DoesExist("radio")
+end function
+
 function ahoraSeg() as integer
     return CreateObject("roDateTime").AsSeconds()
 end function
@@ -107,6 +134,15 @@ sub alCargar()
     m.datos = m.tarea.resultado
     if m.datos = invalid or m.datos.c = invalid then return
     m.canales = m.datos.c
+    if m.datos.r <> invalid
+        n = 0
+        for each r in m.datos.r
+            n = n + 1
+            info = UCase(r.pais)
+            if r.g <> invalid and r.g <> "" then info = info + "  ·  " + r.g
+            m.radios.Push({ n: "R" + n.ToStr(), t: r.t, u: r.u, l: r.l, c: r.c, g: [], p: -1, radio: true, info: info })
+        end for
+    end if
     m.estado.visible = false
     m.cats.visible = true
     m.lista.visible = true
@@ -127,7 +163,11 @@ end sub
 
 ' ---------- Categorías ----------
 sub armarCategorias()
-    m.grupos = [{ k: "todo", t: "Todos" }, { k: "guia", t: "Guía de programación" }, { k: "fav", t: "Favoritos" }]
+    m.grupos = [{ k: "todo", t: "Todos" }]
+    if m.recientes.Count() > 0 then m.grupos.Push({ k: "recientes", t: "Recientes" })
+    m.grupos.Push({ k: "guia", t: "Guía de programación" })
+    m.grupos.Push({ k: "fav", t: "Favoritos" })
+    if m.radios.Count() > 0 then m.grupos.Push({ k: "radio", t: "Radio en vivo  (" + m.radios.Count().ToStr() + ")" })
     for each g in m.datos.grupos
         n = 0
         for each c in m.canales
@@ -186,6 +226,23 @@ end sub
 
 sub filtrar(k as string)
     m.catActual = k
+    if k = "radio"
+        ponerVista(m.radios)
+        return
+    end if
+    if k = "recientes"
+        arr = []
+        for each u in m.recientes
+            for each c in m.canales
+                if c.u = u and not m.ocultos.DoesExist(c.u) then arr.Push(c)
+            end for
+            for each c in m.radios
+                if c.u = u then arr.Push(c)
+            end for
+        end for
+        ponerVista(arr)
+        return
+    end if
     buenos = []
     malos = []
     for each c in m.canales
@@ -239,7 +296,32 @@ function programaAhora(c as object) as string
     return ""
 end function
 
+' Programa actual con descripción y hora de término
+function programaInfo(c as object) as object
+    vacio = { t: "", d: "" }
+    if esRadio(c) or c.p = invalid or c.p < 0 or m.datos.p = invalid then return vacio
+    progs = m.datos.p[c.p]
+    if progs = invalid then return vacio
+    ahora = ahoraSeg()
+    for i = 0 to progs.Count() - 1
+        pr = progs[i]
+        if pr[0] <= ahora and pr[1] > ahora
+            t = pr[2] + "   (hasta las " + horaTexto(pr[1]) + ")"
+            d = ""
+            if pr.Count() > 3 and pr[3] <> invalid then d = pr[3]
+            if i + 1 < progs.Count() then d = d + "   Después: " + progs[i + 1][2]
+            return { t: t, d: d }
+        end if
+    end for
+    return vacio
+end function
+
+sub actualizarReloj()
+    m.reloj.text = horaTexto(ahoraSeg())
+end sub
+
 function textoAhora(c as object) as string
+    if esRadio(c) then return "Radio · " + c.info
     t = programaAhora(c)
     if t <> "" then return "Ahora: " + t
     if falloReciente(c) then return "No abrió la última vez"
@@ -335,21 +417,42 @@ sub reproducir(i as integer)
     m.curUrl = c.u
     m.saltoTimer.control = "stop"
     m.video.control = "stop"
+    m.audio.control = "stop"
     contenido = CreateObject("roSGNode", "ContentNode")
     contenido.url = c.u
     contenido.title = c.t
     contenido.live = true
-    if Instr(1, LCase(c.u), ".m3u8") > 0 then contenido.streamFormat = "hls"
-    m.video.content = contenido
-    m.video.visible = true
+    m.viendo = true
+    if esRadio(c)
+        contenido.streamFormat = c.c
+        m.audio.content = contenido
+        m.video.visible = false
+        m.radioBox.visible = true
+        m.radioLogo.uri = c.l
+        m.radioNombre.text = c.t
+        m.radioInfo.text = c.info
+        m.audio.control = "play"
+    else
+        if Instr(1, LCase(c.u), ".m3u8") > 0 then contenido.streamFormat = "hls"
+        m.video.content = contenido
+        m.radioBox.visible = false
+        m.video.visible = true
+    end if
+    ' Recientes: lo último que viste, primero
+    nuevos = [c.u]
+    for each u in m.recientes
+        if u <> c.u and nuevos.Count() < 15 then nuevos.Push(u)
+    end for
+    m.recientes = nuevos
+    m.reg.Write("recientes", FormatJson(m.recientes))
     m.menu.visible = false
     m.panel.visible = false
     m.opc.visible = false
     m.top.SetFocus(true)
-    m.video.control = "play"
+    if not esRadio(c) then m.video.control = "play"
     m.reg.Write("ultima", c.u)
     m.reg.Flush()
-    mostrarOsd(c.n + "   " + c.t, programaAhora(c))
+    osdCanal(c, "")
 end sub
 
 sub cambiarCanal(d as integer)
@@ -367,7 +470,7 @@ end sub
 sub alCambiarEstadoVideo()
     s = m.video.state
     if s = "buffering"
-        if m.cur >= 0 and m.cur < m.vista.Count() then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, "Cargando...")
+        if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "Cargando...")
     else if s = "playing"
         m.fallos = 0
         if m.fallosReg.DoesExist(m.curUrl)
@@ -375,7 +478,7 @@ sub alCambiarEstadoVideo()
             m.reg.Write("fallos", FormatJson(m.fallosReg))
             m.reg.Flush()
         end if
-        if m.cur >= 0 and m.cur < m.vista.Count() then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, programaAhora(m.vista[m.cur]))
+        if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "")
     else if s = "error"
         ' Recordar que no abrió, para mandarlo al final de la lista
         m.fallosReg[m.curUrl] = ahoraSeg()
@@ -392,13 +495,38 @@ sub alCambiarEstadoVideo()
     end if
 end sub
 
+sub alCambiarEstadoAudio()
+    s = m.audio.state
+    if s = "buffering"
+        m.radioInfo.text = "Conectando..."
+    else if s = "playing"
+        if m.cur >= 0 and m.cur < m.vista.Count() then m.radioInfo.text = m.vista[m.cur].info
+    else if s = "error"
+        m.radioInfo.text = "Esta estación no responde. Prueba otra con Arriba / Abajo."
+    end if
+end sub
+
 sub saltarAlSiguiente()
-    if m.video.visible then cambiarCanal(1)
+    if m.viendo and m.video.visible then cambiarCanal(1)
+end sub
+
+sub osdCanal(c as object, estado as string)
+    info = programaInfo(c)
+    detalle = info.t
+    if estado <> "" then detalle = estado
+    if esRadio(c) then detalle = "Radio en vivo"
+    mostrarOsd(c.n + "   " + c.t, detalle)
+    if estado = "" and info.d <> ""
+        m.osdDesc.text = info.d
+        m.osdFondo.height = 290
+    end if
 end sub
 
 sub mostrarOsd(titulo as string, detalle as string)
     m.osdNombre.text = titulo
     m.osdProg.text = detalle
+    m.osdDesc.text = ""
+    m.osdFondo.height = 170
     m.osd.visible = true
     m.osdTimer.control = "stop"
     m.osdTimer.control = "start"
@@ -406,12 +534,16 @@ end sub
 
 sub ocultarOsd()
     m.osd.visible = false
+    m.osdTimer.duration = 4
 end sub
 
 sub volverALista()
     m.saltoTimer.control = "stop"
     m.video.control = "stop"
+    m.audio.control = "stop"
+    m.viendo = false
     m.video.visible = false
+    m.radioBox.visible = false
     m.osd.visible = false
     m.panel.visible = false
     m.menu.visible = true
@@ -459,6 +591,13 @@ sub abrirOpciones(c as object)
     else
         agregarOpcion(cont, "ocultar", "Ocultar este canal")
     end if
+    if m.viendo and not esRadio(c) and c.u = m.curUrl
+        if m.cc
+            agregarOpcion(cont, "cc", "Desactivar subtítulos")
+        else
+            agregarOpcion(cont, "cc", "Activar subtítulos (si el canal los trae)")
+        end if
+    end if
     agregarOpcion(cont, "cancelar", "Cancelar")
     m.opcTitulo.text = c.n + "   " + c.t
     m.opcLista.content = cont
@@ -475,7 +614,7 @@ end sub
 
 sub cerrarOpciones()
     m.opc.visible = false
-    if m.video.visible
+    if m.viendo
         if m.panel.visible then m.panelLista.SetFocus(true) else m.top.SetFocus(true)
     else if m.catActual = "guia"
         m.guiaLista.SetFocus(true)
@@ -492,6 +631,19 @@ sub alElegirOpcion()
     m.opc.visible = false
     if accion = "fav"
         alternarFavorito(c)
+        cerrarOpciones()
+    else if accion = "cc"
+        m.cc = not m.cc
+        if m.cc
+            m.video.globalCaptionMode = "On"
+            m.reg.Write("cc", "1")
+            mostrarOsd("Subtítulos activados", "Se ven solo si el canal los transmite")
+        else
+            m.video.globalCaptionMode = "Off"
+            m.reg.Write("cc", "0")
+            mostrarOsd("Subtítulos desactivados", "")
+        end if
+        m.reg.Flush()
         cerrarOpciones()
     else if accion = "ocultar"
         ocultarCanal(c)
@@ -510,7 +662,7 @@ end sub
 sub ocultarCanal(c as object)
     m.ocultos[c.u] = true
     guardarMapa("ocultos", m.ocultos)
-    viendo = m.video.visible and c.u = m.curUrl
+    viendo = m.viendo and c.u = m.curUrl
     idx = m.cur
     if m.catActual = "guia" then armarGuia()
     armarCategorias()
@@ -560,7 +712,7 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
         end if
         return false
     end if
-    if m.video.visible and m.panel.visible
+    if m.viendo and m.panel.visible
         if tecla = "back" or tecla = "right"
             cerrarPanel()
             return true
@@ -571,7 +723,7 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
         end if
         return true
     end if
-    if m.video.visible
+    if m.viendo
         if tecla = "left"
             abrirPanel()
             return true
@@ -588,7 +740,10 @@ function onKeyEvent(tecla as string, presionada as boolean) as boolean
             if m.cur >= 0 and m.cur < m.vista.Count() then abrirOpciones(m.vista[m.cur])
             return true
         else if tecla = "OK" or tecla = "right"
-            if m.cur >= 0 and m.cur < m.vista.Count() then mostrarOsd(m.vista[m.cur].n + "   " + m.vista[m.cur].t, programaAhora(m.vista[m.cur]))
+            if m.cur >= 0 and m.cur < m.vista.Count()
+                m.osdTimer.duration = 8
+                osdCanal(m.vista[m.cur], "")
+            end if
             return true
         else if tecla = "play"
             if m.video.state = "paused"

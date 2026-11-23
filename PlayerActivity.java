@@ -106,6 +106,7 @@ public class PlayerActivity extends Activity {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
                 .build();
         vista.setPlayer(player);
+        vista.setShowSubtitleButton(true);
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {

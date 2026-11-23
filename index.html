@@ -71,6 +71,9 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 .qopt{display:grid;gap:8px}.qopt button{min-height:52px;text-align:left;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:16px}
 .qopt button[aria-pressed=true]{border-color:var(--red);box-shadow:0 0 0 2px var(--red) inset;font-weight:800}
 .osd .big{font-size:42px;font-weight:800;line-height:1}
+.radioBar{position:sticky;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;padding:10px max(4vw,14px);background:#1a1d22;color:#fff}
+.radioBar b{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.radioBar .btn{background:#2a2e35;color:#fff;border:0}
+#ccBtn.on{background:var(--red)}
 .kt{display:inline-block;font-size:11px;font-weight:800;color:#fff;background:var(--k);border-radius:5px;padding:0 6px;margin-left:4px;vertical-align:1px}
 .epg{display:grid;gap:6px}
 .epg>div{display:grid;grid-template-columns:5.8em minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
@@ -122,7 +125,7 @@ video{object-fit:contain}
   <div class="player" id="pw">
     <video id="v" controls playsinline controlslist="nofullscreen"></video>
     <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
-    <div class="tools"><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
+    <div class="tools"><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="ccBtn" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Subtítulos">CC</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
   <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="ocultar" aria-label="Ocultar este canal">🚫</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
@@ -135,6 +138,7 @@ video{object-fit:contain}
     <button class="tab" role="tab" data-t="vivo" aria-selected="true">Canales</button>
     <button class="tab" role="tab" data-t="guia" aria-selected="false">Guía</button>
     <button class="tab" role="tab" data-t="kdrama" aria-selected="false" data-adult>K-dramas</button>
+    <button class="tab" role="tab" data-t="radio" aria-selected="false">Radio</button>
     <button class="tab" role="tab" data-t="mx" aria-selected="false" data-adult>TV abierta MX</button>
     <button class="tab" role="tab" data-t="cfg" aria-selected="false">Ajustes</button>
   </div>
@@ -161,6 +165,15 @@ video{object-fit:contain}
     <div class="epg" id="kguia"></div>
     <h2>Plataformas gratis</h2>
     <div class="cards" id="kd"></div>
+  </section>
+
+  <section id="p-radio" hidden>
+    <div class="filters" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+      <input id="rq" type="search" placeholder="Buscar estación…" aria-label="Buscar estación">
+      <select id="rpais" aria-label="País de la estación"></select>
+    </div>
+    <p class="count" id="rcount">Cargando estaciones…</p>
+    <div class="grid" id="rgrid"></div>
   </section>
 
   <section id="p-mx" hidden>
@@ -211,6 +224,8 @@ video{object-fit:contain}
   </div></section>
 </div>
 
+<div class="radioBar" id="radioBar" hidden><span>📻</span><b id="radioNom"></b><button class="btn sm" id="radioPausa">⏸</button><button class="btn sm" id="radioX" aria-label="Apagar radio">✕</button></div>
+<audio id="radioAudio" preload="none"></audio>
 <div class="dlg" id="dlg" hidden><div role="dialog" aria-modal="true" aria-labelledby="dlgT"><h3 id="dlgT"></h3><div id="dlgB"></div><div class="row2" id="dlgA"></div></div></div>
 
 <script>
@@ -461,7 +476,7 @@ function playCh(ch,auto){
   const u=ch.url;
   if(window.Hls&&Hls.isSupported()&&/m3u8/i.test(u)){
     hls=new Hls({manifestLoadingMaxRetry:1});hls.loadSource(u);hls.attachMedia(v);
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{aplicaCalidad();ok()});hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{aplicaCalidad();aplicaCC();ok()});hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,aplicaCC);hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
   }else{v.src=u;v.onloadedmetadata=ok;v.onerror=()=>{if(curCh===ch)fail()};v.load();}
   if(!auto)$('pw').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -573,7 +588,8 @@ $('kidsBtn').onclick=()=>{
 /* ---------- Pestañas y eventos ---------- */
 function tabTo(t){
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
-  ['vivo','guia','kdrama','mx','cfg'].forEach(p=>$('p-'+p).hidden=p!==t);
+  ['vivo','guia','kdrama','radio','mx','cfg'].forEach(p=>$('p-'+p).hidden=p!==t);
+  if(t==='radio')cargaRadios();
   if(t==='guia'){renderGrid();const g=$('gg');requestAnimationFrame(()=>{g.scrollLeft=0})}
   if(t==='kdrama')renderKGuia();
 }
@@ -798,6 +814,52 @@ async function revisarAqui(manual){
 }
 if(PANT?.probar){$('aquiBox').hidden=false;const f=ls.get('aquiFecha',0);$('aquiTxt').textContent=f?`Última revisión: ${new Date(f).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}.`:'Prueba cada canal desde tu internet, para mostrar solo los que de verdad abren.'}
 $('aquiBtn').onclick=()=>revisarAqui(true);
+
+/* ---------- Subtítulos ---------- */
+let subOn=ls.get('cc',false);
+function aplicaCC(){
+  $('ccBtn').classList.toggle('on',subOn);
+  try{for(const t of v.textTracks)t.mode=subOn?'showing':'hidden'}catch(e){}
+  if(hls){try{hls.subtitleDisplay=subOn;if(subOn&&hls.subtitleTracks?.length&&hls.subtitleTrack<0)hls.subtitleTrack=0}catch(e){}}
+}
+try{v.textTracks.addEventListener('addtrack',aplicaCC)}catch(e){}
+$('ccBtn').onclick=()=>{subOn=!subOn;ls.set('cc',subOn);aplicaCC();
+  const hay=(v.textTracks&&v.textTracks.length)||(hls?.subtitleTracks?.length);
+  $('osdN').textContent=subOn?'Subtítulos activados':'Subtítulos desactivados';$('osdP').textContent=subOn&&!hay?'Este canal no trae subtítulos ahora':'';
+  $('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2500)};
+aplicaCC();
+
+/* ---------- Radio en vivo ---------- */
+let radios=null,radioHls=null,radioCur=null;const ra=$('radioAudio');
+async function cargaRadios(){
+  if(radios)return;
+  try{const r=await fetch(window.TL_REPO?`https://raw.githubusercontent.com/${window.TL_REPO}/main/radios.json`:'radios.json',{cache:'no-cache'});radios=await r.json()}catch(e){radios=null;$('rcount').textContent='No se pudieron cargar las estaciones. Revisa tu conexión.';return}
+  const ps=[...new Set(radios.map(x=>x.pais))];
+  $('rpais').innerHTML='<option value="">Todos los países</option>'+ps.map(p=>`<option value="${esc(p)}">${esc(PAISES[p]||p.toUpperCase())}</option>`).join('');
+  $('rpais').value=ps.includes('mx')?'mx':'';pintaRadios();
+}
+function pintaRadios(){
+  if(!radios)return;const q=$('rq').value.trim().toLowerCase(),p=$('rpais').value;
+  const L=radios.filter(x=>(!p||x.pais===p)&&(!q||x.t.toLowerCase().includes(q)||(x.g||'').toLowerCase().includes(q)));
+  $('rcount').textContent=`${L.length} estaciones`;
+  $('rgrid').innerHTML=L.slice(0,300).map(x=>`<div class="ch${radioCur&&radioCur.u===x.u?' on':''}" role="button" tabindex="0" data-r="${esc(x.u)}">${x.l?`<img src="${esc(x.l)}" alt="" loading="lazy" onerror="this.remove()">`:'<div class="ph">📻</div>'}<span class="txt"><span>${esc(x.t)}</span><small>${esc(x.g||PAISES[x.pais]||'')}</small></span></div>`).join('');
+}
+function tocaRadio(x){
+  radioCur=x;try{v.pause()}catch(e){}if(hls){hls.destroy();hls=null}
+  if(radioHls){radioHls.destroy();radioHls=null}
+  $('radioNom').textContent=x.t+' · conectando…';$('radioBar').hidden=false;$('radioPausa').textContent='⏸';
+  if(/m3u8/i.test(x.u)&&window.Hls&&Hls.isSupported()){radioHls=new Hls();radioHls.loadSource(x.u);radioHls.attachMedia(ra)}else{ra.src=x.u}
+  ra.play().then(()=>{$('radioNom').textContent=x.t}).catch(()=>{$('radioNom').textContent=x.t+' · no responde, prueba otra'});
+  ls.set('radio',x);pintaRadios();
+  try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:x.t,artist:'Tele Libre · Radio'})}catch(e){}
+}
+ra.addEventListener('error',()=>{if(radioCur)$('radioNom').textContent=radioCur.t+' · no responde, prueba otra'});
+$('rgrid').addEventListener('click',e=>{const d=e.target.closest('[data-r]');if(!d)return;const x=radios.find(r=>r.u===d.dataset.r);if(x)tocaRadio(x)});
+$('rq').addEventListener('input',pintaRadios);$('rpais').addEventListener('input',pintaRadios);
+$('radioPausa').onclick=()=>{if(ra.paused){ra.play().catch(()=>{});$('radioPausa').textContent='⏸'}else{ra.pause();$('radioPausa').textContent='▶'}};
+$('radioX').onclick=()=>{ra.pause();ra.removeAttribute('src');if(radioHls){radioHls.destroy();radioHls=null}radioCur=null;$('radioBar').hidden=true;pintaRadios()};
+// Si pones un canal de TV, se apaga la radio
+v.addEventListener('play',()=>{if(radioCur)$('radioX').click()});
 
 setInterval(()=>{render();showEpg();checkRems()},30000);
 renderRems();applyKids();

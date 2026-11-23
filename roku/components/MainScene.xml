@@ -22,6 +22,14 @@
         text="OK: ver el canal      Viendo un canal: Arriba / Abajo cambian, Izquierda abre la lista      Botón *: favorito u ocultar" />
     </Group>
     <Video id="video" width="1920" height="1080" visible="false" />
+    <Audio id="audio" />
+    <Group id="radioBox" visible="false">
+      <Rectangle width="1920" height="1080" color="0x0F1114FF" />
+      <Poster id="radioLogo" translation="[760,220]" width="400" height="400" loadDisplayMode="scaleToFit" loadWidth="400" loadHeight="400" />
+      <Label id="radioNombre" translation="[160,660]" width="1600" horizAlign="center" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
+      <Label id="radioInfo" translation="[160,740]" width="1600" horizAlign="center" font="font:MediumSystemFont" color="0xFF6B62FF" />
+      <Label text="Radio en vivo      Arriba / Abajo: otra estación      Regresar: volver" translation="[160,980]" width="1600" horizAlign="center" font="font:SmallSystemFont" color="0x9AA1AAFF" />
+    </Group>
     <Group id="panel" visible="false">
       <Rectangle width="860" height="1080" color="0x0F1114E6" />
       <Label text="Canales" translation="[50,40]" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
@@ -30,9 +38,10 @@
       <Label text="OK: ver      Regresar o Derecha: cerrar" translation="[50,1010]" width="780" font="font:SmallSystemFont" color="0x9AA1AAFF" />
     </Group>
     <Group id="osd" visible="false" translation="[80,60]">
-      <Rectangle width="1100" height="170" color="0x000000B3" />
+      <Rectangle id="osdFondo" width="1100" height="170" color="0x000000B3" />
       <Label id="osdNombre" translation="[36,22]" width="1030" font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
       <Label id="osdProg" translation="[36,100]" width="1030" font="font:MediumSystemFont" color="0xFF6B62FF" />
+      <Label id="osdDesc" translation="[36,160]" width="1030" wrap="true" maxLines="3" font="font:SmallSystemFont" color="0xE0E3E6FF" />
     </Group>
     <Group id="opc" visible="false">
       <Rectangle width="1920" height="1080" color="0x00000099" />
@@ -41,7 +50,9 @@
       <LabelList id="opcLista" translation="[600,410]" itemSize="[720,72]" numRows="4" vertFocusAnimationStyle="floatingFocus"
         color="0xC8CDD3FF" focusedColor="0x0F1114FF" focusBitmapBlendColor="0xFFFFFFFF" />
     </Group>
+    <Label id="reloj" translation="[1520,40]" width="320" horizAlign="right" font="font:MediumBoldSystemFont" color="0xFFFFFFFF" />
     <Timer id="osdTimer" duration="4" />
+    <Timer id="relojTimer" duration="15" repeat="true" />
     <Timer id="saltoTimer" duration="2.5" />
     <Timer id="refresco" duration="60" repeat="true" />
   </children>

@@ -92,6 +92,16 @@ sub init()
     m.tarea.control = "RUN"
 end sub
 
+' ---------- Errores: se atrapan para que la app no se cierre, y se anotan ----------
+sub anotarError(donde as string, e as object)
+    texto = donde
+    if e <> invalid and e.message <> invalid then texto = texto + ": " + e.message
+    if e <> invalid and e.number <> invalid then texto = texto + " (" + e.number.ToStr() + ")"
+    m.reg.Write("ultimoError", texto)
+    m.reg.Flush()
+    if m.osd <> invalid then mostrarOsd("Se corrigió un error de la app", texto)
+end sub
+
 ' ---------- Guardado en el Roku ----------
 function leerMapa(clave as string) as object
     mapa = {}
@@ -131,13 +141,30 @@ end function
 
 ' ---------- Carga ----------
 sub alFallarCarga()
+    try
+        alFallarCargaSeguro()
+    catch e
+        anotarError("alFallarCarga", e)
+    end try
+end sub
+
+sub alFallarCargaSeguro()
     m.estado.text = m.tarea.error + " Revisa tu internet y vuelve a abrir la app."
 end sub
 
 sub alCargar()
+    try
+        alCargarSeguro()
+    catch e
+        anotarError("alCargar", e)
+    end try
+end sub
+
+sub alCargarSeguro()
     m.datos = m.tarea.resultado
     if m.datos = invalid or m.datos.c = invalid then return
     m.canales = m.datos.c
+    errorPrevio = m.reg.Read("ultimoError")
     if m.datos.r <> invalid
         n = 0
         for each r in m.datos.r
@@ -184,6 +211,12 @@ sub alCargar()
         m.lista.SetFocus(true)
     end if
     m.refresco.control = "start"
+    if errorPrevio <> ""
+        m.reg.Delete("ultimoError")
+        m.reg.Flush()
+        mostrarOsd("Error anotado la vez pasada", errorPrevio)
+        m.osdTimer.duration = 15
+    end if
 end sub
 
 ' ---------- Categorías ----------
@@ -235,6 +268,14 @@ function indiceDe(url as string) as integer
 end function
 
 sub alCambiarCategoria()
+    try
+        alCambiarCategoriaSeguro()
+    catch e
+        anotarError("alCambiarCategoria", e)
+    end try
+end sub
+
+sub alCambiarCategoriaSeguro()
     if m.armando = true then return
     i = m.cats.itemFocused
     if i < 0 or i >= m.grupos.Count() then return
@@ -342,6 +383,14 @@ function programaInfo(c as object) as object
 end function
 
 sub actualizarReloj()
+    try
+        actualizarRelojSeguro()
+    catch e
+        anotarError("actualizarReloj", e)
+    end try
+end sub
+
+sub actualizarRelojSeguro()
     m.reloj.text = horaTexto(ahoraSeg())
 end sub
 
@@ -354,6 +403,14 @@ function textoAhora(c as object) as string
 end function
 
 sub actualizarAhora()
+    try
+        actualizarAhoraSeguro()
+    catch e
+        anotarError("actualizarAhora", e)
+    end try
+end sub
+
+sub actualizarAhoraSeguro()
     cont = m.lista.content
     if cont <> invalid
         for i = 0 to cont.GetChildCount() - 1
@@ -422,6 +479,14 @@ sub armarGuia()
 end sub
 
 sub alElegirEnGuia()
+    try
+        alElegirEnGuiaSeguro()
+    catch e
+        anotarError("alElegirEnGuia", e)
+    end try
+end sub
+
+sub alElegirEnGuiaSeguro()
     i = m.guiaLista.itemSelected
     if i < 0 or i >= m.guiaCanales.Count() then return
     ponerVista(m.guiaCanales)
@@ -430,6 +495,14 @@ end sub
 
 ' ---------- Reproducción ----------
 sub alElegirCanal()
+    try
+        alElegirCanalSeguro()
+    catch e
+        anotarError("alElegirCanal", e)
+    end try
+end sub
+
+sub alElegirCanalSeguro()
     reproducir(m.lista.itemSelected)
 end sub
 
@@ -498,6 +571,14 @@ sub cambiarCanal(d as integer)
 end sub
 
 sub alCambiarEstadoVideo()
+    try
+        alCambiarEstadoVideoSeguro()
+    catch e
+        anotarError("alCambiarEstadoVideo", e)
+    end try
+end sub
+
+sub alCambiarEstadoVideoSeguro()
     s = m.video.state
     if s = "buffering"
         if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "Cargando...")
@@ -542,6 +623,14 @@ sub alCambiarEstadoVideo()
 end sub
 
 sub alCambiarEstadoAudio()
+    try
+        alCambiarEstadoAudioSeguro()
+    catch e
+        anotarError("alCambiarEstadoAudio", e)
+    end try
+end sub
+
+sub alCambiarEstadoAudioSeguro()
     s = m.audio.state
     if s = "buffering"
         m.radioInfo.text = "Conectando..."
@@ -554,6 +643,14 @@ sub alCambiarEstadoAudio()
 end sub
 
 sub reconectar()
+    try
+        reconectarSeguro()
+    catch e
+        anotarError("reconectar", e)
+    end try
+end sub
+
+sub reconectarSeguro()
     if not m.viendo or m.video.content = invalid then return
     contenido = m.video.content
     m.video.control = "stop"
@@ -562,6 +659,14 @@ sub reconectar()
 end sub
 
 sub saltarAlSiguiente()
+    try
+        saltarAlSiguienteSeguro()
+    catch e
+        anotarError("saltarAlSiguiente", e)
+    end try
+end sub
+
+sub saltarAlSiguienteSeguro()
     if m.viendo and m.video.visible then cambiarCanal(1)
 end sub
 
@@ -588,6 +693,14 @@ sub mostrarOsd(titulo as string, detalle as string)
 end sub
 
 sub ocultarOsd()
+    try
+        ocultarOsdSeguro()
+    catch e
+        anotarError("ocultarOsd", e)
+    end try
+end sub
+
+sub ocultarOsdSeguro()
     m.osd.visible = false
     m.osdTimer.duration = 4
 end sub
@@ -627,6 +740,14 @@ sub cerrarPanel()
 end sub
 
 sub alElegirEnPanel()
+    try
+        alElegirEnPanelSeguro()
+    catch e
+        anotarError("alElegirEnPanel", e)
+    end try
+end sub
+
+sub alElegirEnPanelSeguro()
     reproducir(m.panelLista.itemSelected)
 end sub
 
@@ -692,6 +813,14 @@ sub cerrarOpciones()
 end sub
 
 sub alElegirOpcion()
+    try
+        alElegirOpcionSeguro()
+    catch e
+        anotarError("alElegirOpcion", e)
+    end try
+end sub
+
+sub alElegirOpcionSeguro()
     i = m.opcLista.itemSelected
     if i < 0 or i >= m.opcAcciones.Count() then return
     accion = m.opcAcciones[i]
@@ -772,6 +901,16 @@ end sub
 
 ' ---------- Control remoto ----------
 function onKeyEvent(tecla as string, presionada as boolean) as boolean
+    r = true
+    try
+        r = teclaSegura(tecla, presionada)
+    catch e
+        anotarError("tecla " + tecla, e)
+    end try
+    return r
+end function
+
+function teclaSegura(tecla as string, presionada as boolean) as boolean
     if not presionada then return false
     if m.opc.visible
         if tecla = "back" or tecla = "left" or tecla = "right" or tecla = "options"

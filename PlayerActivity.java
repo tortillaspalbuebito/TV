@@ -35,7 +35,8 @@ public class PlayerActivity extends Activity {
     private ExoPlayer player;
     private ArrayList<String> urls = new ArrayList<>();
     private ArrayList<String> nombres = new ArrayList<>();
-    private int pos = 0, fallos = 0;
+    private int pos = 0, fallos = 0, reint = 0;
+    private boolean visto = false;
     private TextView nombre, aviso, btnAnt, btnSig, btnFav;
     private boolean[] favs;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -110,6 +111,23 @@ public class PlayerActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
+                // Si el canal ya se estaba viendo, reconectar el mismo en vez de saltar
+                if (visto) {
+                    if (reint < 5) {
+                        reint++;
+                        mostrarAviso("Reconectando…");
+                        h.postDelayed(() -> {
+                            if (player != null) {
+                                player.seekToDefaultPosition();
+                                player.prepare();
+                                player.setPlayWhenReady(true);
+                            }
+                        }, 2500);
+                    } else {
+                        mostrarAviso("Se perdió la señal. Usa ◀ ▶ para otro canal.");
+                    }
+                    return;
+                }
                 fallos++;
                 if (fallos >= 5 || urls.size() < 2) {
                     mostrarAviso("Ningún canal respondió. Toca ◀ ▶ para probar otro.");
@@ -124,6 +142,8 @@ public class PlayerActivity extends Activity {
             public void onPlaybackStateChanged(int estado) {
                 if (estado == Player.STATE_READY) {
                     fallos = 0;
+                    visto = true;
+                    reint = 0;
                     aviso.setVisibility(View.GONE);
                     ultima = urls.get(pos);
                     getSharedPreferences("telelibre", MODE_PRIVATE).edit()
@@ -162,6 +182,8 @@ public class PlayerActivity extends Activity {
     }
 
     private void abrir() {
+        visto = false;
+        reint = 0;
         String url = urls.get(pos);
         ultima = url;
         nombre.setText(nombres.get(pos));

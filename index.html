@@ -456,8 +456,26 @@ function ocultarCanal(ch){
   $('osdN').textContent='Canal oculto';$('osdP').textContent=ch.name;$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2500);
 }
 function step(d){if(!view.length)return;const i=view.indexOf(curCh);playCh(view[((i<0?(d>0?-1:0):i)+d+view.length)%view.length])}
-function playCh(ch,auto){
+/* Un canal que ya se estaba viendo nunca se salta: si se corta, se reconecta solo. */
+let vistoUrl='',reintentos=0,reconT=0;
+v.addEventListener('playing',()=>{if(curCh){vistoUrl=curCh.url;reintentos=0;if($('msgTxt').textContent.startsWith('Reconectando'))msg('')}});
+function reconectar(ch,d){
+  if(curCh!==ch)return;reintentos++;clearTimeout(reconT);
+  if(reintentos<=2&&hls&&d&&d.type===Hls.ErrorTypes.MEDIA_ERROR){msg('Reconectando…');try{hls.recoverMediaError()}catch(e){}return}
+  if(reintentos<=2&&hls&&d&&d.type===Hls.ErrorTypes.NETWORK_ERROR){msg('Reconectando…');reconT=setTimeout(()=>{if(curCh===ch&&hls)try{hls.startLoad()}catch(e){}},1500);return}
+  if(reintentos<=5){msg('Reconectando…');reconT=setTimeout(()=>{if(curCh===ch)playCh(ch,true,true)},2500);return}
+  if(PANT?.reproducir){if(hls){hls.destroy();hls=null}abrirNativo(ch);return}
+  msg(`Se perdió la señal de ${ch.name}.`,true,true);
+}
+// Si la imagen se congela 30 segundos, reconectar el mismo canal
+let ultT=-1,congelado=0;
+setInterval(()=>{
+  if(!curCh||vistoUrl!==curCh.url||v.paused||enTele||document.hidden){congelado=0;ultT=-1;return}
+  if(v.currentTime===ultT){if(++congelado>=3){congelado=0;reconectar(curCh,null)}}else{congelado=0;ultT=v.currentTime}
+},10000);
+function playCh(ch,auto,recon){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
+  if(!recon){clearTimeout(reconT);reintentos=0;if(vistoUrl!==ch.url)vistoUrl=''}
   $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();pintaFav();
   if(hls){hls.destroy();hls=null}
   if(enTele&&!auto){mandarCast(ch);msg(`Se está viendo en la tele: ${ch.name}`);return}
@@ -472,12 +490,13 @@ function playCh(ch,auto){
     else if(auto&&PANT?.reproducir){saltos=0;msg(`Último canal: ${ch.name}`,true,true)}
     else{saltos=0;msg('Este canal no está disponible ahora.',true)}};
   if(DEMO){msg('');DEMO.show(ch,ahora);ok();return}
-  msg('Conectando…');
+  if(!recon)msg('Conectando…');
   const u=ch.url;
   if(window.Hls&&Hls.isSupported()&&/m3u8/i.test(u)){
-    hls=new Hls({manifestLoadingMaxRetry:1});hls.loadSource(u);hls.attachMedia(v);
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{aplicaCalidad();aplicaCC();ok()});hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,aplicaCC);hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal&&curCh===ch)fail()});
-  }else{v.src=u;v.onloadedmetadata=ok;v.onerror=()=>{if(curCh===ch)fail()};v.load();}
+    hls=new Hls({manifestLoadingMaxRetry:2,levelLoadingMaxRetry:6,fragLoadingMaxRetry:6,maxBufferHole:1});hls.loadSource(u);hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{aplicaCalidad();aplicaCC();if(recon){v.play().catch(()=>{})}else ok()});hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,aplicaCC);
+    hls.on(Hls.Events.ERROR,(e,d)=>{if(!d.fatal||curCh!==ch)return;if(vistoUrl===ch.url)reconectar(ch,d);else fail()});
+  }else{v.src=u;v.onloadedmetadata=recon?()=>v.play().catch(()=>{}):ok;v.onerror=()=>{if(curCh!==ch)return;if(vistoUrl===ch.url)reconectar(ch,null);else fail()};v.load();}
   if(!auto)$('pw').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function showEpg(){
@@ -615,7 +634,7 @@ document.addEventListener('click',e=>{
   const d=e.target.closest('[data-del]');if(d){delRem(d.dataset.del);return}
   const u=e.target.closest('#rec [data-u],#kguia [data-u]');if(u){playCh(all.find(c=>c.url===u.dataset.u))}
 });
-$('againBtn').onclick=()=>abrirNativo(curCh);
+$('againBtn').onclick=()=>{if(!curCh)return;if(PANT?.reproducir)abrirNativo(curCh);else{reintentos=0;playCh(curCh)}};
 $('ocultar').onclick=()=>{if(!curCh){sheet('Primero elige un canal','<p class="note">Pon el canal que quieres quitar y luego toca 🚫.</p>',[['Cerrar']]);return}
   const c=curCh;sheet(`¿Ocultar ${esc(c.name)}?`,'<p class="note">Ya no aparecerá en la lista ni al cambiar de canal. Puedes volver a mostrarlo en Ajustes → Canales.</p>',[['Ocultar',()=>ocultarCanal(c),'red'],['Cancelar']])};
 $('ocTodos').onclick=()=>{ocultos=new Set();ls.set('ocultos',[]);pintaOcultos();render();pintaGrupos()};

@@ -13,6 +13,35 @@ M3U = "https://iptv-org.github.io/iptv/languages/spa.m3u"
 PAISES_LATAM = ["mx", "ar", "co", "cl", "pe", "ve", "ec", "gt", "cu", "bo", "do", "hn", "py", "sv", "ni", "cr", "pa", "uy", "pr"]
 
 
+PLUTO_MX = "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/PlutoTV/mx.xml.gz"
+
+
+def pluto_mx(texto_lista):
+    """Canales de Pluto TV México (gratis y oficiales) que todavía no están en la lista."""
+    try:
+        blob = get(PLUTO_MX)
+    except Exception as e:
+        print("sin Pluto TV", e)
+        return "", None
+    ya = set(re.findall(r"plu-([0-9a-f]{24})", texto_lista))
+    extra, n = [], 0
+    for ev, el in ET.iterparse(io.BytesIO(blob), events=("end",)):
+        if el.tag == "channel":
+            cid = el.get("id", "")
+            nombre = (el.findtext("display-name") or "").strip()
+            icono = el.find("icon")
+            logo = icono.get("src", "") if icono is not None else ""
+            if re.fullmatch(r"[0-9a-f]{24}", cid) and cid not in ya and nombre:
+                extra.append(f'#EXTINF:-1 tvg-id="Pluto{cid}.mx" tvg-logo="{logo}" group-title="Undefined",{nombre}')
+                extra.append(f"https://jmp2.uk/plu-{cid}.m3u8")
+                n += 1
+            el.clear()
+        elif el.tag == "programme":
+            el.clear()
+    print(f"Pluto TV: {n} canales de México agregados")
+    return "\n".join(extra), blob
+
+
 def prioridad(pais):
     """Orden de la lista: México, Latinoamérica, EE. UU. (en español), otros, España."""
     if pais == "mx": return 0
@@ -417,6 +446,9 @@ def radios():
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "guia.json"
     m3u = lista_completa(get(M3U).decode("utf-8", "replace"))
+    extra_pluto, guia_pluto = pluto_mx(m3u)
+    if extra_pluto:
+        m3u = m3u.rstrip() + "\n" + extra_pluto + "\n"
     with open("lista.m3u", "w", encoding="utf-8") as f:
         f.write(m3u)
     blobs = []
@@ -425,6 +457,8 @@ def main():
             blobs.append(get(u)); print("ok ", u)
         except Exception as e:
             print("sin", u, e)
+    if guia_pluto:
+        blobs.append(gzip.decompress(guia_pluto) if guia_pluto[:2] == b"\x1f\x8b" else guia_pluto)
     g = build(m3u, blobs)
     urls = stream_urls(m3u)
     g["x"] = caidos(urls)

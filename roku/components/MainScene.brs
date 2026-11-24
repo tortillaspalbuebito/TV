@@ -12,6 +12,7 @@ sub init()
     m.osdProg = m.top.FindNode("osdProg")
     m.osdTimer = m.top.FindNode("osdTimer")
     m.saltoTimer = m.top.FindNode("saltoTimer")
+    m.reconTimer = m.top.FindNode("reconTimer")
     m.refresco = m.top.FindNode("refresco")
     m.panel = m.top.FindNode("panel")
     m.panelLista = m.top.FindNode("panelLista")
@@ -52,6 +53,8 @@ sub init()
     m.fallos = 0
     m.armando = false
     m.viendo = false
+    m.visto = false
+    m.reint = 0
     m.radios = []
     m.recientes = []
     t = m.reg.Read("recientes")
@@ -70,6 +73,7 @@ sub init()
     m.video.ObserveField("state", "alCambiarEstadoVideo")
     m.osdTimer.ObserveField("fire", "ocultarOsd")
     m.saltoTimer.ObserveField("fire", "saltarAlSiguiente")
+    m.reconTimer.ObserveField("fire", "reconectar")
     m.refresco.ObserveField("fire", "actualizarAhora")
     m.relojTimer.ObserveField("fire", "actualizarReloj")
     m.audio.ObserveField("state", "alCambiarEstadoAudio")
@@ -415,6 +419,9 @@ sub reproducir(i as integer)
     m.cur = i
     c = m.vista[i]
     m.curUrl = c.u
+    m.visto = false
+    m.reint = 0
+    m.reconTimer.control = "stop"
     m.saltoTimer.control = "stop"
     m.video.control = "stop"
     m.audio.control = "stop"
@@ -473,12 +480,23 @@ sub alCambiarEstadoVideo()
         if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "Cargando...")
     else if s = "playing"
         m.fallos = 0
+        m.visto = true
+        m.reint = 0
         if m.fallosReg.DoesExist(m.curUrl)
             m.fallosReg.Delete(m.curUrl)
             m.reg.Write("fallos", FormatJson(m.fallosReg))
             m.reg.Flush()
         end if
         if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "")
+    else if s = "error" and m.visto
+        ' Ya se estaba viendo: reconectar el mismo canal, nunca saltar
+        if m.reint < 5
+            m.reint = m.reint + 1
+            if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "Reconectando...")
+            m.reconTimer.control = "start"
+        else
+            mostrarOsd("Se perdió la señal", "Usa Arriba / Abajo para otro canal, o Regresar")
+        end if
     else if s = "error"
         ' Recordar que no abrió, para mandarlo al final de la lista
         m.fallosReg[m.curUrl] = ahoraSeg()
@@ -504,6 +522,14 @@ sub alCambiarEstadoAudio()
     else if s = "error"
         m.radioInfo.text = "Esta estación no responde. Prueba otra con Arriba / Abajo."
     end if
+end sub
+
+sub reconectar()
+    if not m.viendo or m.video.content = invalid then return
+    contenido = m.video.content
+    m.video.control = "stop"
+    m.video.content = contenido
+    m.video.control = "play"
 end sub
 
 sub saltarAlSiguiente()

@@ -42,6 +42,25 @@ def pluto_mx(texto_lista):
     return "\n".join(extra), blob
 
 
+def quitar_bloqueados(m3u_text, archivo="bloqueados.txt"):
+    """Quita los canales cuyos servidores o direcciones están en bloqueados.txt."""
+    try:
+        reglas = [l.strip().lower() for l in open(archivo, encoding="utf-8")
+                  if l.strip() and not l.strip().startswith("#")]
+    except FileNotFoundError:
+        return m3u_text
+    if not reglas:
+        return m3u_text
+    lineas, out, n, i = m3u_text.splitlines(), [], 0, 0
+    while i < len(lineas):
+        l = lineas[i]
+        if l.startswith("#EXTINF") and i + 1 < len(lineas) and any(r in lineas[i + 1].lower() for r in reglas):
+            n += 1; i += 2; continue
+        out.append(l); i += 1
+    print(f"bloqueados: {n} canales quitados")
+    return "\n".join(out) + "\n"
+
+
 def prioridad(pais):
     """Orden de la lista: México, Latinoamérica, EE. UU. (en español), otros, España."""
     if pais == "mx": return 0
@@ -449,6 +468,7 @@ def main():
     extra_pluto, guia_pluto = pluto_mx(m3u)
     if extra_pluto:
         m3u = m3u.rstrip() + "\n" + extra_pluto + "\n"
+    m3u = quitar_bloqueados(m3u)
     with open("lista.m3u", "w", encoding="utf-8") as f:
         f.write(m3u)
     blobs = []

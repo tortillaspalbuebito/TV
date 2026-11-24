@@ -1,0 +1,7 @@
+# Servidores o direcciones que NO se deben mostrar en Tele Libre (uno por línea).
+# Se quitan de la lista del celular y del Roku en la siguiente actualización de la guía.
+# Puede ser un servidor completo (servilive.com) o parte de una dirección.
+
+# Pantalla negra fuera de su página (probado 23 nov 2026: 15TV, Super Channel 12,
+# Tele Saltillo, Amazonia TV, Buendía TV, Radio Chalaca)
+servilive.com

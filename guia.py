@@ -51,10 +51,13 @@ def quitar_bloqueados(m3u_text, archivo="bloqueados.txt"):
         return m3u_text
     if not reglas:
         return m3u_text
+    ip = "ip-numerica" in reglas
     lineas, out, n, i = m3u_text.splitlines(), [], 0, 0
     while i < len(lineas):
         l = lineas[i]
-        if l.startswith("#EXTINF") and i + 1 < len(lineas) and any(r in lineas[i + 1].lower() for r in reglas):
+        if l.startswith("#EXTINF") and i + 1 < len(lineas) and (
+                any(r in lineas[i + 1].lower() for r in reglas if r != "ip-numerica")
+                or (ip and re.match(r"^https?://\d+\.\d+\.\d+\.\d+[:/]", lineas[i + 1].strip()))):
             n += 1; i += 2; continue
         out.append(l); i += 1
     print(f"bloqueados: {n} canales quitados")

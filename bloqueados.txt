@@ -5,3 +5,7 @@
 # Pantalla negra fuera de su página (probado 23 nov 2026: 15TV, Super Channel 12,
 # Tele Saltillo, Amazonia TV, Buendía TV, Radio Chalaca)
 servilive.com
+
+# Servidores identificados solo con números (IP): ahí estaban las retransmisiones
+# no autorizadas (canales de paga mezclados con abiertos). Quitados el 23 nov 2026.
+ip-numerica

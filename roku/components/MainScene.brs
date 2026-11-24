@@ -153,6 +153,27 @@ sub alCargar()
     armarCategorias()
     filtrar("todo")
 
+    ' Si la vez pasada un canal no terminó de abrir (por ejemplo, Roku puso su letrero),
+    ' no volver a ponerlo y decir cuál fue.
+    intento = m.reg.Read("intentando")
+    if intento <> ""
+        m.reg.Delete("intentando")
+        m.reg.Flush()
+        sospechoso = invalid
+        for each c in m.canales
+            if c.u = intento then sospechoso = c
+        end for
+        for each c in m.radios
+            if c.u = intento then sospechoso = c
+        end for
+        if sospechoso <> invalid
+            m.lista.SetFocus(true)
+            avisoIntento(sospechoso)
+            m.refresco.control = "start"
+            return
+        end if
+    end if
+
     ' Volver al último canal que se estaba viendo
     ultima = m.reg.Read("ultima")
     i = indiceDe(ultima)
@@ -458,6 +479,8 @@ sub reproducir(i as integer)
     m.top.SetFocus(true)
     if not esRadio(c) then m.video.control = "play"
     m.reg.Write("ultima", c.u)
+    ' Se borra cuando el canal empieza a verse; si Roku interrumpe, queda anotado
+    m.reg.Write("intentando", c.u)
     m.reg.Flush()
     osdCanal(c, "")
 end sub
@@ -479,6 +502,10 @@ sub alCambiarEstadoVideo()
     if s = "buffering"
         if m.cur >= 0 and m.cur < m.vista.Count() then osdCanal(m.vista[m.cur], "Cargando...")
     else if s = "playing"
+        if m.reg.Exists("intentando")
+            m.reg.Delete("intentando")
+            m.reg.Flush()
+        end if
         m.fallos = 0
         m.visto = true
         m.reint = 0
@@ -498,6 +525,7 @@ sub alCambiarEstadoVideo()
             mostrarOsd("Se perdió la señal", "Usa Arriba / Abajo para otro canal, o Regresar")
         end if
     else if s = "error"
+        if m.reg.Exists("intentando") then m.reg.Delete("intentando")
         ' Recordar que no abrió, para mandarlo al final de la lista
         m.fallosReg[m.curUrl] = ahoraSeg()
         m.reg.Write("fallos", FormatJson(m.fallosReg))
@@ -518,6 +546,7 @@ sub alCambiarEstadoAudio()
     if s = "buffering"
         m.radioInfo.text = "Conectando..."
     else if s = "playing"
+        if m.reg.Exists("intentando") then m.reg.Delete("intentando")
         if m.cur >= 0 and m.cur < m.vista.Count() then m.radioInfo.text = m.vista[m.cur].info
     else if s = "error"
         m.radioInfo.text = "Esta estación no responde. Prueba otra con Arriba / Abajo."
@@ -626,6 +655,19 @@ sub abrirOpciones(c as object)
     end if
     agregarOpcion(cont, "cancelar", "Cancelar")
     m.opcTitulo.text = c.n + "   " + c.t
+    m.opcLista.content = cont
+    m.opcLista.jumpToItem = 0
+    m.opc.visible = true
+    m.opcLista.SetFocus(true)
+end sub
+
+sub avisoIntento(c as object)
+    m.opcCanal = c
+    m.opcAcciones = []
+    cont = CreateObject("roSGNode", "ContentNode")
+    agregarOpcion(cont, "ocultar", "Ocultar ese canal")
+    agregarOpcion(cont, "cancelar", "Dejarlo")
+    m.opcTitulo.text = "No terminó de abrir: " + c.n + "  " + c.t
     m.opcLista.content = cont
     m.opcLista.jumpToItem = 0
     m.opc.visible = true

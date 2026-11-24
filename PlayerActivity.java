@@ -24,6 +24,7 @@ import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import java.util.ArrayList;
 
@@ -37,7 +38,8 @@ public class PlayerActivity extends Activity {
     private ArrayList<String> nombres = new ArrayList<>();
     private int pos = 0, fallos = 0, reint = 0;
     private boolean visto = false;
-    private TextView nombre, aviso, btnAnt, btnSig, btnFav;
+    private TextView nombre, aviso, btnAnt, btnSig, btnFav, btnAjuste;
+    private PlayerView vistaVideo;
     private boolean[] favs;
     private final Handler h = new Handler(Looper.getMainLooper());
     private float x0, y0;
@@ -64,6 +66,7 @@ public class PlayerActivity extends Activity {
         FrameLayout raiz = new FrameLayout(this);
         raiz.setBackgroundColor(Color.BLACK);
         PlayerView vista = new PlayerView(this);
+        vistaVideo = vista;
         raiz.addView(vista, new FrameLayout.LayoutParams(-1, -1));
 
         nombre = etiqueta(18);
@@ -89,12 +92,19 @@ public class PlayerActivity extends Activity {
         lf.setMargins(0, 30, 30, 0);
         raiz.addView(btnFav, lf);
         btnFav.setOnClickListener(v -> alternarFavorito());
+        btnAjuste = boton("⤢");
+        btnAjuste.setTextSize(24);
+        FrameLayout.LayoutParams lj = new FrameLayout.LayoutParams(140, 140, Gravity.TOP | Gravity.END);
+        lj.setMargins(0, 30, 190, 0);
+        raiz.addView(btnAjuste, lj);
+        btnAjuste.setOnClickListener(v -> cambiarAjuste());
         btnAnt.setOnClickListener(v -> cambiar(-1));
         btnSig.setOnClickListener(v -> cambiar(1));
         vista.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) vis -> {
             btnAnt.setVisibility(vis);
             btnSig.setVisibility(vis);
             btnFav.setVisibility(vis);
+            btnAjuste.setVisibility(vis);
         });
         setContentView(raiz);
 
@@ -188,6 +198,7 @@ public class PlayerActivity extends Activity {
         ultima = url;
         nombre.setText(nombres.get(pos));
         pintarFavorito();
+        aplicarAjuste();
         nombre.setVisibility(View.VISIBLE);
         h.removeCallbacksAndMessages("nombre");
         h.postAtTime(() -> nombre.setVisibility(View.GONE), "nombre", android.os.SystemClock.uptimeMillis() + 4000);
@@ -196,6 +207,25 @@ public class PlayerActivity extends Activity {
         player.setMediaItem(item.build());
         player.prepare();
         player.setPlayWhenReady(true);
+    }
+
+    /** Ajuste de imagen guardado por canal: 0 normal, 1 llenar (recorta), 2 estirar. */
+    private int ajusteActual() {
+        return getSharedPreferences("telelibre_ajuste", MODE_PRIVATE).getInt(urls.get(pos), 0);
+    }
+
+    private void aplicarAjuste() {
+        int a = ajusteActual();
+        vistaVideo.setResizeMode(a == 1 ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                : a == 2 ? AspectRatioFrameLayout.RESIZE_MODE_FILL : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    }
+
+    private void cambiarAjuste() {
+        int a = (ajusteActual() + 1) % 3;
+        getSharedPreferences("telelibre_ajuste", MODE_PRIVATE).edit().putInt(urls.get(pos), a).apply();
+        aplicarAjuste();
+        mostrarAviso(a == 1 ? "Imagen: llenar pantalla" : a == 2 ? "Imagen: estirar" : "Imagen: normal");
+        h.postAtTime(() -> aviso.setVisibility(View.GONE), "fav", android.os.SystemClock.uptimeMillis() + 1500);
     }
 
     private void pintarFavorito() {

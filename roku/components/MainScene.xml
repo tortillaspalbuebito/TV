@@ -19,7 +19,7 @@
       <MarkupList id="lista" translation="[580,150]" itemComponentName="CanalItem" itemSize="[1260,100]" itemSpacing="[0,8]"
         numRows="8" vertFocusAnimationStyle="floatingFocus" focusBitmapBlendColor="0xFF3B30FF" />
       <Label id="ayuda" translation="[80,1010]" width="1760" font="font:SmallSystemFont" color="0x9AA1AAFF"
-        text="OK: ver el canal      Viendo un canal: Arriba / Abajo cambian, Izquierda abre la lista      Botón *: favorito u ocultar" />
+        text="OK: ver el canal      Viendo un canal: Arriba / Abajo cambian, Izquierda abre la lista      Botón *: opciones      Botón ↺: ajustar imagen" />
     </Group>
     <Video id="video" width="1920" height="1080" visible="false" />
     <Audio id="audio" />

@@ -36,6 +36,12 @@ sub init()
     m.reg = CreateObject("roRegistrySection", "telelibre")
     m.favs = leerMapa("favs")
     m.ocultos = leerMapa("ocultos")
+    m.ajustes = {}
+    t = m.reg.Read("ajustes")
+    if t <> ""
+        a = ParseJson(t)
+        if a <> invalid then m.ajustes = a
+    end if
     m.fallosReg = {}
     t = m.reg.Read("fallos")
     if t <> ""
@@ -535,6 +541,7 @@ sub reproducir(i as integer)
         m.audio.control = "play"
     else
         if Instr(1, LCase(c.u), ".m3u8") > 0 then contenido.streamFormat = "hls"
+        aplicarAjuste(ajusteDe(c.u))
         m.video.content = contenido
         m.radioBox.visible = false
         m.video.visible = true
@@ -705,6 +712,53 @@ sub ocultarOsdSeguro()
     m.osdTimer.duration = 4
 end sub
 
+'' ---------- Ajuste de imagen por canal ----------
+function ajusteDe(u as string) as string
+    if m.ajustes.DoesExist(u) then return m.ajustes[u]
+    return "normal"
+end function
+
+function nombreAjuste(modo as string) as string
+    if modo = "ampliar" then return "Ampliar (recorta arriba y abajo)"
+    if modo = "estirar" then return "Estirar (llena deformando)"
+    return "Normal"
+end function
+
+sub aplicarAjuste(modo as string)
+    m.video.scale = [1.0, 1.0]
+    if modo = "ampliar"
+        m.video.width = 2560
+        m.video.height = 1440
+        m.video.translation = [-320, -180]
+    else
+        m.video.width = 1920
+        m.video.height = 1080
+        m.video.translation = [0, 0]
+        if modo = "estirar"
+            m.video.scaleRotateCenter = [960, 540]
+            m.video.scale = [1.3333, 1.0]
+        end if
+    end if
+end sub
+
+sub cambiarAjuste()
+    if m.cur < 0 or m.cur >= m.vista.Count() or esRadio(m.vista[m.cur]) then return
+    c = m.vista[m.cur]
+    modo = ajusteDe(c.u)
+    if modo = "normal"
+        modo = "ampliar"
+    else if modo = "ampliar"
+        modo = "estirar"
+    else
+        modo = "normal"
+    end if
+    if modo = "normal" then m.ajustes.Delete(c.u) else m.ajustes[c.u] = modo
+    m.reg.Write("ajustes", FormatJson(m.ajustes))
+    m.reg.Flush()
+    aplicarAjuste(modo)
+    mostrarOsd("Imagen: " + nombreAjuste(modo), "Botón ↺ para cambiarla. Se guarda para este canal.")
+end sub
+
 sub volverALista()
     m.saltoTimer.control = "stop"
     m.video.control = "stop"
@@ -768,6 +822,7 @@ sub abrirOpciones(c as object)
         agregarOpcion(cont, "ocultar", "Ocultar este canal")
     end if
     if m.viendo and not esRadio(c) and c.u = m.curUrl
+        agregarOpcion(cont, "ajuste", "Ajustar imagen (ahora: " + nombreAjuste(ajusteDe(c.u)) + ")")
         if m.cc
             agregarOpcion(cont, "cc", "Desactivar subtítulos")
         else
@@ -829,6 +884,9 @@ sub alElegirOpcionSeguro()
     if accion = "fav"
         alternarFavorito(c)
         cerrarOpciones()
+    else if accion = "ajuste"
+        cerrarOpciones()
+        cambiarAjuste()
     else if accion = "cc"
         m.cc = not m.cc
         if m.cc
@@ -951,6 +1009,9 @@ function teclaSegura(tecla as string, presionada as boolean) as boolean
                 m.osdTimer.duration = 8
                 osdCanal(m.vista[m.cur], "")
             end if
+            return true
+        else if tecla = "replay"
+            cambiarAjuste()
             return true
         else if tecla = "play"
             if m.video.state = "paused"

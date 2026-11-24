@@ -125,7 +125,7 @@ video{object-fit:contain}
   <div class="player" id="pw">
     <video id="v" controls playsinline controlslist="nofullscreen"></video>
     <div class="osd" id="osd"><b id="osdN"></b><span id="osdP"></span></div>
-    <div class="tools"><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="ccBtn" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Subtítulos">CC</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
+    <div class="tools"><button class="fsb" id="ajusteBtn" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Ajustar imagen">⤢</button><button class="fsb" id="favBtn" aria-label="Agregar a favoritos" hidden>☆</button><button class="fsb" id="ccBtn" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Subtítulos">CC</button><button class="fsb" id="calidad" style="width:auto;padding:0 10px;font-size:14px;font-weight:800" aria-label="Calidad de video">Auto</button><button class="fsb" id="fs" aria-label="Pantalla completa">⛶</button></div>
     <div class="msg" id="msg"><span id="msgTxt">Elige un canal para empezar</span><button class="btn red" id="againBtn" hidden>Seguir viendo</button><button class="btn red" id="nextBtn" hidden>Probar el siguiente canal</button></div>
   </div>
   <div class="now"><b id="nowName">Sin canal</b><button class="btn" id="tele" aria-label="Mandar a la tele">📺</button><button class="btn" id="teclado" aria-label="Marcar número de canal">123</button><button class="btn" id="ocultar" aria-label="Ocultar este canal">🚫</button><button class="btn" id="prev" aria-label="Canal anterior">◀</button><button class="btn" id="next" aria-label="Canal siguiente">▶</button></div>
@@ -426,6 +426,13 @@ async function restaurar(){
 }
 /* Favoritos */
 function pintaFav(){const b=$('favBtn');b.hidden=!curCh;if(!curCh)return;const y=favs.has(curCh.url);b.textContent=y?'★':'☆';b.classList.toggle('y',y);b.setAttribute('aria-label',y?'Quitar de favoritos':'Agregar a favoritos')}
+/* Ajuste de imagen por canal: normal, llenar (recorta), estirar */
+let ajustes=ls.get('ajustes',{});
+const MODOS=[['contain','Normal'],['cover','Llenar pantalla'],['fill','Estirar']];
+function aplicaAjuste(){const m=curCh&&ajustes[curCh.url]||'contain';v.style.objectFit=m;$('ajusteBtn').textContent=m==='contain'?'⤢':m==='cover'?'⤢ Llenar':'⤢ Estirar'}
+$('ajusteBtn').onclick=()=>{if(!curCh)return;const a=ajustes[curCh.url]||'contain',i=(MODOS.findIndex(x=>x[0]===a)+1)%MODOS.length,m=MODOS[i][0];
+  if(m==='contain')delete ajustes[curCh.url];else ajustes[curCh.url]=m;ls.set('ajustes',ajustes);aplicaAjuste();
+  $('osdN').textContent='Imagen: '+MODOS[i][1];$('osdP').textContent='Se guarda para este canal';$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2000)};
 function alternaFav(){if(!curCh)return;const y=!favs.has(curCh.url);y?favs.add(curCh.url):favs.delete(curCh.url);ls.set('favs',[...favs]);pintaFav();render();
   $('osdN').textContent=y?'★ Agregado a favoritos':'Quitado de favoritos';$('osdP').textContent=curCh.name;$('osd').classList.add('on');clearTimeout(osdT);osdT=setTimeout(()=>$('osd').classList.remove('on'),2000)}
 async function aplicaFavsNativo(){
@@ -476,7 +483,7 @@ setInterval(()=>{
 function playCh(ch,auto,recon){
   if(!ch)return;curCh=ch;clearTimeout(skipT);
   if(!recon){clearTimeout(reconT);reintentos=0;if(vistoUrl!==ch.url)vistoUrl=''}
-  $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();pintaFav();
+  $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();pintaFav();aplicaAjuste();
   if(hls){hls.destroy();hls=null}
   if(enTele&&!auto){mandarCast(ch);msg(`Se está viendo en la tele: ${ch.name}`);return}
   const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);setLast(ch.url);marcaNativo(ch.url,false);

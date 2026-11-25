@@ -108,6 +108,36 @@ sub anotarError(donde as string, e as object)
     if m.osd <> invalid then mostrarOsd("Se corrigió un error de la app", texto)
 end sub
 
+' ---------- Canal mandado desde el celular ----------
+sub alLanzar()
+    try
+        url = m.top.lanzar
+        if url = invalid or url = "" then return
+        if m.canales = invalid or m.canales.Count() = 0
+            m.pendiente = url
+            return
+        end if
+        ponerCanalPorUrl(url)
+    catch e
+        anotarError("alLanzar", e)
+    end try
+end sub
+
+sub ponerCanalPorUrl(url as string)
+    m.pendiente = invalid
+    m.opc.visible = false
+    m.panel.visible = false
+    m.catActual = "todo"
+    filtrar("todo")
+    i = indiceDe(url)
+    if i < 0
+        ' Canal que no está en la lista (o está oculto): se pone igual
+        ponerVista([{ n: "", t: "Desde el celular", u: url, g: [], p: -1 }])
+        i = 0
+    end if
+    reproducir(i)
+end sub
+
 ' ---------- Guardado en el Roku ----------
 function leerMapa(clave as string) as object
     mapa = {}
@@ -171,6 +201,7 @@ sub alCargarSeguro()
     if m.datos = invalid or m.datos.c = invalid then return
     m.canales = m.datos.c
     errorPrevio = m.reg.Read("ultimoError")
+
     if m.datos.r <> invalid
         n = 0
         for each r in m.datos.r
@@ -185,6 +216,13 @@ sub alCargarSeguro()
     m.lista.visible = true
     armarCategorias()
     filtrar("todo")
+
+    ' Canal mandado desde el celular al abrir la app
+    if m.pendiente <> invalid
+        ponerCanalPorUrl(m.pendiente)
+        m.refresco.control = "start"
+        return
+    end if
 
     ' Si la vez pasada un canal no terminó de abrir (por ejemplo, Roku puso su letrero),
     ' no volver a ponerlo y decir cuál fue.

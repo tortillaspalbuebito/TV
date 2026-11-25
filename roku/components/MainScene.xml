@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
+  <interface>
+    <field id="lanzar" type="string" onChange="alLanzar" alwaysNotify="true" />
+  </interface>
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <children>
     <Rectangle id="fondo" width="1920" height="1080" color="0x0F1114FF" />

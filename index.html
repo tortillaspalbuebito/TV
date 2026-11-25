@@ -485,7 +485,7 @@ function playCh(ch,auto,recon){
   if(!recon){clearTimeout(reconT);reintentos=0;if(vistoUrl!==ch.url)vistoUrl=''}
   $('nowName').textContent=(ch.num?ch.num+'  ':'')+ch.name;document.body.classList.add('playing');render();showEpg();osd();pintaFav();aplicaAjuste();
   if(hls){hls.destroy();hls=null}
-  if(enTele&&!auto){mandarCast(ch);msg(`Se está viendo en la tele: ${ch.name}`);return}
+  if(enTele&&!auto){mandarATele(ch);return}
   const ok=()=>{saltos=0;msg('');delete failed[ch.url];ls.set('failed',failed);aqui[ch.url]=[1,Date.now()];ls.set('aqui',aqui);setLast(ch.url);marcaNativo(ch.url,false);
     recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
     if(!DEMO)v.play().catch(()=>msg('Toca ▶ en el video para reproducir'))};
@@ -724,21 +724,57 @@ async function enviarTele(){
   if(/Android/i.test(navigator.userAgent)&&/^https?:/.test(curCh.url)){location.href=`intent:${curCh.url}#Intent;action=android.intent.action.VIEW;type=application/x-mpegURL;S.title=${enc(curCh.name)};end`;return}
   sheet('No se pudo abrir','<p class="note">En este equipo no hay una app para mandar video a la tele. En Android instala Web Video Caster o LocalCast desde Play Store.</p>',[['Cerrar']]);
 }
+/* ---------- Mandar a la tele: Chromecast, Roku y Smart TV (DLNA) ---------- */
+let tele=null; // {tipo:'cast'|'roku'|'dlna', nombre, base?, control?}
+const tituloDe=ch=>(ch.num?ch.num+'  ':'')+ch.name;
+function enLaTele(nombre,ch){enTele=true;try{v.pause()}catch(e){}if(hls){hls.destroy();hls=null}
+  $('teleTxt').textContent=`📺 ${nombre}: ${ch.name}`;$('teleBar').hidden=false;msg('Se está viendo en la tele. Cambia de canal aquí y cambia allá.')}
 function mandarCast(ch){
-  if(!ch||!PANT?.transmitir)return;
-  PANT.transmitir({url:ch.url,titulo:(ch.num?ch.num+'  ':'')+ch.name}).catch(()=>sheet('No se pudo','<p class="note">Este celular no tiene los servicios de Google para Chromecast. Usa "Duplicar pantalla".</p>',[['Cerrar']]));
+  if(!ch||!PANT?.transmitir)return;tele={tipo:'cast',nombre:'Chromecast'};
+  PANT.transmitir({url:ch.url,titulo:tituloDe(ch)}).catch(()=>sheet('No se pudo','<p class="note">Este celular no tiene los servicios de Google para Chromecast. Usa "Duplicar pantalla".</p>',[['Cerrar']]));
+}
+async function mandarATele(ch){
+  if(!ch||!tele)return;
+  if(tele.tipo==='cast'){mandarCast(ch);return}
+  msg(`Mandando ${ch.name} a ${tele.nombre}…`);
+  try{await PANT.enviarRed({...tele,url:ch.url,titulo:tituloDe(ch)});ls.set('ultimaTele',tele);enLaTele(tele.nombre,ch)}
+  catch(e){
+    if(e?.code==='SIN_APP')sheet(`Falta Tele Libre en ${esc(tele.nombre)}`,'<p class="note">Para mandar canales a este Roku, primero instala ahí la app Tele Libre para Roku (modo desarrollador). Mientras, puedes usar "Duplicar pantalla".</p>',[['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{}),'red'],['Cerrar']]);
+    else sheet('La tele no respondió',`<p class="note">${esc(tele.nombre)} no aceptó el canal. Revisa que esté encendida y en el mismo WiFi. Algunas teles no pueden abrir este tipo de señal; en ese caso usa "Duplicar pantalla".</p>`,[['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{}),'red'],['Cerrar']]);
+    if(!enTele)msg('')
+  }
 }
 PANT?.addListener?.('tele',d=>{
-  if(d.estado==='enviando'){enTele=true;try{v.pause()}catch(e){}if(hls){hls.destroy();hls=null}
-    $('teleTxt').textContent=`📺 En la tele: ${d.titulo}`;$('teleBar').hidden=false;msg('Se está viendo en la tele. Cambia de canal aquí y cambia allá.')}
-  else if(d.estado==='desconectado'){enTele=false;$('teleBar').hidden=true;msg('Elige un canal para empezar')}
+  if(d.estado==='enviando'){tele={tipo:'cast',nombre:'Chromecast'};enLaTele('En la tele',{name:d.titulo})}
+  else if(d.estado==='desconectado'){if(tele?.tipo==='cast'){enTele=false;tele=null;$('teleBar').hidden=true;msg('Elige un canal para empezar')}}
   else if(d.estado==='fallo'){enTele=false;$('teleBar').hidden=true;sheet('No se conectó','<p class="note">No se pudo conectar con la tele. Revisa que estén en el mismo WiFi.</p>',[['Cerrar']])}
 });
-$('teleStop').onclick=()=>PANT?.detenerTele?.().catch(()=>{});
+$('teleStop').onclick=()=>{
+  if(tele?.tipo==='cast')PANT?.detenerTele?.().catch(()=>{});
+  else if(tele)PANT?.detenerRed?.(tele).catch(()=>{});
+  enTele=false;tele=null;$('teleBar').hidden=true;msg('');if(curCh)playCh(curCh);
+};
+const iconoTele=t=>t.tipo==='roku'?'Roku':t.tipo==='dlna'?(t.marca||'Smart TV'):'Chromecast';
+async function buscarTeles(){
+  sheet('Buscando teles…','<p class="note">Buscando Roku y Smart TV en tu WiFi. Tarda unos segundos.</p>',[['Cancelar']]);
+  let teles=[];try{teles=(await PANT.buscarTeles()).teles||[]}catch(e){}
+  if($('dlg').hidden)return; // la cancelaste
+  const acc=teles.map(t=>[`${t.nombre} · ${iconoTele(t)}`,()=>{tele=t;mandarATele(curCh)},'red']);
+  acc.push(['Chromecast / Google TV',()=>mandarCast(curCh)],['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{})],['Con otra app',enviarTele],['Cancelar']);
+  sheet(teles.length?'Elige tu tele':'No encontré teles',
+    teles.length?`<p class="note">Encontré ${teles.length} ${teles.length===1?'tele':'teles'} en tu WiFi. En Roku se abre en tu app Tele Libre; en las Smart TV se manda directo.</p>`
+      :'<p class="note">No apareció ninguna tele en tu WiFi. Revisa que esté encendida y en la misma red. Si es Chromecast o Google TV, usa su botón. Para cualquier otra tele, "Duplicar pantalla" siempre funciona.</p>',acc);
+}
 $('tele').onclick=()=>{
   if(!curCh){sheet('Primero elige un canal','<p class="note">Pon un canal y luego toca 📺 para mandarlo a tu tele.</p>',[['Cerrar']]);return}
+  if(PANT?.buscarTeles){
+    const u=ls.get('ultimaTele',null);
+    if(u)sheet('Mandar a la tele',`<p class="note">¿Lo mandas a <b>${esc(u.nombre)}</b> como la vez pasada, o busco otra tele?</p>`,[[`${u.nombre} · ${iconoTele(u)}`,()=>{tele=u;mandarATele(curCh)},'red'],['Buscar otra tele',buscarTeles],['Cancelar']]);
+    else buscarTeles();
+    return;
+  }
   if(PANT?.transmitir){
-    sheet('Mandar a la tele',`<p class="note"><b>Chromecast o Google TV:</b> se manda directo, sin otra app, y tu celular queda como control remoto. Algunos canales no abren en Chromecast; si pasa, usa "Duplicar pantalla".</p><p class="note"><b>Roku y otras Smart TV:</b> usa "Duplicar pantalla" de Android: lo que ves en el celular aparece en la tele.</p>`,
+    sheet('Mandar a la tele','<p class="note"><b>Chromecast o Google TV:</b> se manda directo. <b>Otras teles:</b> usa "Duplicar pantalla".</p>',
       [['Chromecast / Google TV',()=>mandarCast(curCh),'red'],['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{})],['Con otra app',enviarTele],['Cancelar']]);
     return;
   }

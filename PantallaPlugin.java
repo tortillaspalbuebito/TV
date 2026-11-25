@@ -333,4 +333,61 @@ public class PantallaPlugin extends Plugin {
         r.put("quitar", quitar);
         call.resolve(r);
     }
+
+    /* ---------- Teles en el WiFi: Roku y Smart TV (DLNA) ---------- */
+    @PluginMethod
+    public void buscarTeles(PluginCall call) {
+        new Thread(() -> {
+            android.net.wifi.WifiManager.MulticastLock lock = null;
+            try {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getContext().getApplicationContext()
+                        .getSystemService(android.content.Context.WIFI_SERVICE);
+                lock = wm.createMulticastLock("telelibre");
+                lock.setReferenceCounted(false);
+                lock.acquire();
+            } catch (Exception e) { /* sin permiso de multicast */ }
+            JSArray teles = new JSArray();
+            try {
+                for (org.json.JSONObject t : Teles.buscar()) teles.put(t);
+            } catch (Exception e) { /* nada */ }
+            if (lock != null) try { lock.release(); } catch (Exception e) { }
+            JSObject r = new JSObject();
+            r.put("teles", teles);
+            call.resolve(r);
+        }).start();
+    }
+
+    @PluginMethod
+    public void enviarRed(PluginCall call) {
+        final String tipo = call.getString("tipo", "");
+        final String url = call.getString("url");
+        final String titulo = call.getString("titulo", "Tele Libre");
+        final String base = call.getString("base");
+        final String control = call.getString("control");
+        new Thread(() -> {
+            try {
+                int code;
+                if ("roku".equals(tipo)) code = Teles.enviarRoku(base, url);
+                else code = Teles.enviarDlna(control, url, titulo);
+                if (code >= 200 && code < 300) call.resolve();
+                else call.reject("La tele respondió " + code, code == 404 ? "SIN_APP" : "TELE_" + code);
+            } catch (Exception e) {
+                call.reject("No se pudo conectar con la tele", "SIN_CONEXION");
+            }
+        }).start();
+    }
+
+    @PluginMethod
+    public void detenerRed(PluginCall call) {
+        final String tipo = call.getString("tipo", "");
+        final String base = call.getString("base");
+        final String control = call.getString("control");
+        new Thread(() -> {
+            try {
+                if ("roku".equals(tipo)) Teles.teclaRoku(base, "Back");
+                else Teles.detenerDlna(control);
+            } catch (Exception e) { /* nada */ }
+            call.resolve();
+        }).start();
+    }
 }

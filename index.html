@@ -740,7 +740,7 @@ async function mandarATele(ch){
   try{await PANT.enviarRed({...tele,url:ch.url,titulo:tituloDe(ch)});ls.set('ultimaTele',tele);enLaTele(tele.nombre,ch)}
   catch(e){
     if(e?.code==='SIN_APP')sheet(`Falta Tele Libre en ${esc(tele.nombre)}`,'<p class="note">Para mandar canales a este Roku, primero instala ahí la app Tele Libre para Roku (modo desarrollador). Mientras, puedes usar "Duplicar pantalla".</p>',[['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{}),'red'],['Cerrar']]);
-    else sheet('La tele no respondió',`<p class="note">${esc(tele.nombre)} no aceptó el canal. Revisa que esté encendida y en el mismo WiFi. Algunas teles no pueden abrir este tipo de señal; en ese caso usa "Duplicar pantalla".</p>`,[['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{}),'red'],['Cerrar']]);
+    else sheet('La tele no respondió',`<p class="note">${esc(tele.nombre)} no aceptó el canal. Revisa que esté encendida y en el mismo WiFi. Algunas teles no pueden abrir este tipo de señal; en ese caso usa "Duplicar pantalla".</p>${e?.message?`<p class="note">Respuesta de la tele: ${esc(e.message)}</p>`:''}`,[['Duplicar pantalla',()=>PANT.duplicarPantalla().catch(()=>{}),'red'],['Cerrar']]);
     if(!enTele)msg('')
   }
 }

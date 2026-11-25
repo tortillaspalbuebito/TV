@@ -367,10 +367,10 @@ public class PantallaPlugin extends Plugin {
         new Thread(() -> {
             try {
                 int code;
-                if ("roku".equals(tipo)) code = Teles.enviarRoku(base, url);
+                if ("roku".equals(tipo)) code = Teles.enviarRoku(base, Teles.resolver(url));
                 else code = Teles.enviarDlna(control, url, titulo);
                 if (code >= 200 && code < 300) call.resolve();
-                else call.reject("La tele respondió " + code, code == 404 ? "SIN_APP" : "TELE_" + code);
+                else call.reject(Teles.ultimoError.isEmpty() ? "La tele respondió " + code : Teles.ultimoError, code == 404 && "roku".equals(tipo) ? "SIN_APP" : "TELE_" + code);
             } catch (Exception e) {
                 call.reject("No se pudo conectar con la tele", "SIN_CONEXION");
             }

@@ -128,6 +128,9 @@ public class Teles {
         }
     }
 
+    /** Último error que respondió la tele (para mostrarlo en la app). */
+    public static String ultimoError = "";
+
     private static int post(String url, String cuerpo, String soapAction) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(4000);
@@ -144,8 +147,42 @@ public class Teles {
             o.write(b);
         }
         int code = c.getResponseCode();
+        if (code >= 300) {
+            try (InputStream e = c.getErrorStream()) {
+                if (e != null) {
+                    ByteArrayOutputStream o = new ByteArrayOutputStream();
+                    byte[] buf = new byte[2048];
+                    int n;
+                    while ((n = e.read(buf)) > 0 && o.size() < 8000) o.write(buf, 0, n);
+                    String r = o.toString("UTF-8");
+                    String ec = etiqueta(r, "errorCode"), ed = etiqueta(r, "errorDescription");
+                    ultimoError = "HTTP " + code + (ec.isEmpty() ? "" : " · error " + ec) + (ed.isEmpty() ? "" : " (" + ed + ")");
+                }
+            } catch (Exception ignored) { }
+            if (ultimoError.isEmpty()) ultimoError = "HTTP " + code;
+        }
         c.disconnect();
         return code;
+    }
+
+    /** Sigue las redirecciones (por ejemplo las de Pluto TV) y devuelve la dirección final de la señal. */
+    public static String resolver(String url) {
+        String actual = url;
+        try {
+            for (int i = 0; i < 6; i++) {
+                HttpURLConnection c = (HttpURLConnection) new URL(actual).openConnection();
+                c.setInstanceFollowRedirects(false);
+                c.setConnectTimeout(5000);
+                c.setReadTimeout(5000);
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) TeleLibre");
+                int code = c.getResponseCode();
+                String loc = c.getHeaderField("Location");
+                c.disconnect();
+                if (code >= 300 && code < 400 && loc != null) actual = new URL(new URL(actual), loc).toString();
+                else break;
+            }
+        } catch (Exception e) { /* se usa la que haya */ }
+        return actual;
     }
 
     /** Roku: abre Tele Libre (app instalada en modo desarrollador) con el canal. 404 = no está instalada. */
@@ -170,16 +207,35 @@ public class Teles {
         return post(control, cuerpo, svc + "#" + accion);
     }
 
-    /** Smart TV (DLNA): le manda la señal y la pone a reproducir. */
-    public static int enviarDlna(String control, String url, String titulo) throws Exception {
-        String didl = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
-                + "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
-                + "<dc:title>" + esc(titulo) + "</dc:title><upnp:class>object.item.videoItem</upnp:class>"
-                + "<res protocolInfo=\"http-get:*:application/vnd.apple.mpegurl:*\">" + esc(url) + "</res></item></DIDL-Lite>";
+    /** Smart TV (DLNA): prueba varios formatos hasta que la tele acepte la señal, y la pone a reproducir. */
+    public static int enviarDlna(String control, String urlOriginal, String titulo) throws Exception {
+        ultimoError = "";
+        String url = resolver(urlOriginal);
+        String[] tipos = {"application/vnd.apple.mpegurl", "application/x-mpegURL", "video/mp2t", "video/mp4", ""};
+        int r = 500;
         try { soap(control, "Stop", ""); } catch (Exception e) { /* puede no estar reproduciendo */ }
-        int r = soap(control, "SetAVTransportURI", "<CurrentURI>" + esc(url) + "</CurrentURI><CurrentURIMetaData>" + esc(didl) + "</CurrentURIMetaData>");
-        if (r >= 300) return r;
-        return soap(control, "Play", "<Speed>1</Speed>");
+        for (String tipo : tipos) {
+            String meta = "";
+            if (!tipo.isEmpty()) {
+                String didl = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
+                        + "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
+                        + "<dc:title>" + esc(titulo) + "</dc:title><upnp:class>object.item.videoItem</upnp:class>"
+                        + "<res protocolInfo=\"http-get:*:" + tipo + ":*\">" + esc(url) + "</res></item></DIDL-Lite>";
+                meta = esc(didl);
+            }
+            try {
+                r = soap(control, "SetAVTransportURI", "<CurrentURI>" + esc(url) + "</CurrentURI><CurrentURIMetaData>" + meta + "</CurrentURIMetaData>");
+            } catch (Exception e) {
+                r = 500;
+                ultimoError = "sin respuesta";
+            }
+            if (r < 300) {
+                int p = soap(control, "Play", "<Speed>1</Speed>");
+                if (p < 300) return p;
+                r = p;
+            }
+        }
+        return r;
     }
 
     public static int detenerDlna(String control) throws Exception {

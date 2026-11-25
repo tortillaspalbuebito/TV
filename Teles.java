@@ -207,38 +207,54 @@ public class Teles {
         return post(control, cuerpo, svc + "#" + accion);
     }
 
-    /** Smart TV (DLNA): prueba varios formatos hasta que la tele acepte la señal, y la pone a reproducir. */
+    private static String didl(String url, String tipo, String titulo) {
+        return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
+                + "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
+                + "<dc:title>" + esc(titulo) + "</dc:title><upnp:class>object.item.videoItem.videoBroadcast</upnp:class>"
+                + "<res protocolInfo=\"http-get:*:" + tipo + ":*\">" + esc(url) + "</res></item></DIDL-Lite>";
+    }
+
+    /** Pone una dirección en la tele y le da Play. Devuelve el código HTTP. */
+    private static int ponerYReproducir(String control, String url, String tipo, String titulo) {
+        try {
+            String meta = tipo.isEmpty() ? "" : esc(didl(url, tipo, titulo));
+            int r = soap(control, "SetAVTransportURI", "<CurrentURI>" + esc(url) + "</CurrentURI><CurrentURIMetaData>" + meta + "</CurrentURIMetaData>");
+            if (r >= 300) return r;
+            return soap(control, "Play", "<Speed>1</Speed>");
+        } catch (Exception e) {
+            ultimoError = "sin respuesta";
+            return 500;
+        }
+    }
+
+    /**
+     * Smart TV (DLNA): primero por el puente del celular (MPEG-TS, lo que entienden casi todas);
+     * si no se puede, prueba mandar la señal directa en varios formatos.
+     */
     public static int enviarDlna(String control, String urlOriginal, String titulo) throws Exception {
         ultimoError = "";
-        String url = resolver(urlOriginal);
-        String[] tipos = {"application/vnd.apple.mpegurl", "application/x-mpegURL", "video/mp2t", "video/mp4", ""};
-        int r = 500;
         try { soap(control, "Stop", ""); } catch (Exception e) { /* puede no estar reproduciendo */ }
+        int r = 500;
+        try {
+            String puente = Puente.iniciar(urlOriginal);
+            for (String tipo : new String[]{"video/mp2t", "video/mpeg", "video/vnd.dlna.mpeg-tts", ""}) {
+                r = ponerYReproducir(control, puente, tipo, titulo);
+                if (r < 300) return r;
+            }
+        } catch (Exception e) {
+            ultimoError = "puente: " + e.getMessage();
+        }
+        String url = resolver(urlOriginal);
+        String[] tipos = {"application/vnd.apple.mpegurl", "application/x-mpegURL", "video/mp2t", ""};
         for (String tipo : tipos) {
-            String meta = "";
-            if (!tipo.isEmpty()) {
-                String didl = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
-                        + "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
-                        + "<dc:title>" + esc(titulo) + "</dc:title><upnp:class>object.item.videoItem</upnp:class>"
-                        + "<res protocolInfo=\"http-get:*:" + tipo + ":*\">" + esc(url) + "</res></item></DIDL-Lite>";
-                meta = esc(didl);
-            }
-            try {
-                r = soap(control, "SetAVTransportURI", "<CurrentURI>" + esc(url) + "</CurrentURI><CurrentURIMetaData>" + meta + "</CurrentURIMetaData>");
-            } catch (Exception e) {
-                r = 500;
-                ultimoError = "sin respuesta";
-            }
-            if (r < 300) {
-                int p = soap(control, "Play", "<Speed>1</Speed>");
-                if (p < 300) return p;
-                r = p;
-            }
+            r = ponerYReproducir(control, url, tipo, titulo);
+            if (r < 300) return r;
         }
         return r;
     }
 
     public static int detenerDlna(String control) throws Exception {
+        Puente.detener();
         return soap(control, "Stop", "");
     }
 }

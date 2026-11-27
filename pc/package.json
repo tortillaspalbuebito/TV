@@ -1,0 +1,22 @@
+{
+  "name": "tele-libre-pc",
+  "productName": "Tele Libre",
+  "version": "1.0.0",
+  "description": "Tele Libre para PC: canales gratis en español con guía",
+  "author": "Tele Libre",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.telelibre.pc",
+    "productName": "Tele Libre",
+    "files": ["main.js", "app/**"],
+    "icon": "app/icon-512.png",
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": { "oneClick": true, "createDesktopShortcut": true, "shortcutName": "Tele Libre" },
+    "portable": { "artifactName": "TeleLibre-portable.exe" },
+    "artifactName": "TeleLibre-instalador.exe"
+  }
+}

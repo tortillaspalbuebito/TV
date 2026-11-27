@@ -827,16 +827,17 @@ $('detectar').onclick=()=>{
 };
 
 /* ---------- Actualizaciones del APK ---------- */
-const VER=+window.TL_VER||0,REPO=window.TL_REPO||'';
+const VER=+window.TL_VER||0,REPO=window.TL_REPO||'',PC=!!window.TL_PC;
 let nueva=null;
 async function buscaActualizacion(manual){
-  if(!APP||!REPO||!VER)return;
+  if(!(APP||PC)||!REPO||!VER)return;
   if(!manual&&Date.now()-ls.get('updCheck',0)<6*36e5)return;
   if(manual)$('verTxt').textContent='Buscando…';
   try{
-    const r=await fetch(`https://api.github.com/repos/${REPO}/releases/latest`,{cache:'no-store'});if(!r.ok)throw 0;
-    const j=await r.json(),n=+String(j.tag_name||'').replace(/\D/g,'');ls.set('updCheck',Date.now());
-    const a=(j.assets||[]).find(x=>/\.apk$/i.test(x.name));
+    const r=await fetch(PC?`https://api.github.com/repos/${REPO}/releases?per_page=30`:`https://api.github.com/repos/${REPO}/releases/latest`,{cache:'no-store'});if(!r.ok)throw 0;
+    let j=await r.json();if(PC)j=j.find(x=>/^pc-/.test(x.tag_name))||{};
+    const n=+String(j.tag_name||'').replace(/\D/g,'');ls.set('updCheck',Date.now());
+    const a=(j.assets||[]).find(x=>PC?/instalador\.exe$/i.test(x.name):/\.apk$/i.test(x.name));
     if(n>VER&&a){nueva={n,url:a.browser_download_url};
       if(manual||ls.get('updNo',0)!==n){$('updTxt').textContent=`Hay una versión nueva de Tele Libre (${n})`;$('upd').hidden=false}}
     else nueva=null;
@@ -844,13 +845,13 @@ async function buscaActualizacion(manual){
   pintaVersion();
 }
 function pintaVersion(){
-  $('verBox').hidden=!(APP&&VER);
+  $('verBox').hidden=!((APP||PC)&&VER);
   $('verTxt').textContent=nueva?`Tienes la versión ${VER}. Ya está la ${nueva.n}.`:`Tienes la versión ${VER}, la más reciente.`;
   $('verBtn').textContent=nueva?'Descargar versión nueva':'Buscar actualización';
 }
 function descargaNueva(){
   if(!nueva)return;$('upd').hidden=true;
-  if(PANT?.abrir)PANT.abrir({url:nueva.url}).catch(()=>{location.href=nueva.url});else location.href=nueva.url;
+  if(PANT?.abrir)PANT.abrir({url:nueva.url}).catch(()=>{location.href=nueva.url});else if(PC)window.open(nueva.url);else location.href=nueva.url;
   sheet('Descargando la versión nueva','<p class="note">Cuando termine la descarga, toca la notificación (o abre el archivo en Descargas) y luego <b>Actualizar</b>. Tus favoritos, avisos y ajustes se conservan.</p>',[['Entendido',0,'red']]);
 }
 $('updSi').onclick=descargaNueva;

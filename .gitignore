@@ -1,1 +1,4 @@
 __pycache__/
+pc/app/
+pc/node_modules/
+pc/dist/

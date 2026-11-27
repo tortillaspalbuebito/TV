@@ -1,0 +1,57 @@
+name: Compilar para PC
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - index.html
+      - "icon-*.png"
+      - "pc/**"
+      - .github/workflows/pc.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Preparar la app
+        shell: bash
+        run: |
+          mkdir -p pc/app
+          cp index.html icon-*.png pc/app/
+          GUIA="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/guia.json"
+          sed -i "s#</head>#<script>window.TL_PC=true;window.TL_GUIA='${GUIA}';window.TL_VER=${GITHUB_RUN_NUMBER};window.TL_REPO='${GITHUB_REPOSITORY}';</script></head>#" pc/app/index.html
+          cd pc && npm pkg set version="1.0.${GITHUB_RUN_NUMBER}"
+
+      - name: Compilar programa de Windows
+        shell: bash
+        working-directory: pc
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm install
+          npx electron-builder --win --x64 --publish never
+          ls -la dist
+
+      - name: Publicar para descargar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pc-${{ github.run_number }}
+          name: Tele Libre para PC ${{ github.run_number }}
+          body: |
+            Para Windows 10/11.
+            - TeleLibre-instalador.exe: se instala y crea un acceso directo en el escritorio.
+            - TeleLibre-portable.exe: no se instala, solo dale doble clic.
+          files: |
+            pc/dist/TeleLibre-instalador.exe
+            pc/dist/TeleLibre-portable.exe
+          make_latest: false

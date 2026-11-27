@@ -1,5 +1,3 @@
-exec(open('ver_tmp.py').read())
-import sys; sys.exit(0)
 #!/usr/bin/env python3
 """Informe: canales gratis y legales en español que existen en fuentes oficiales
 (Pluto TV, Samsung TV Plus, Plex, Free-TV, TDTChannels) y que NO están en lista.m3u.

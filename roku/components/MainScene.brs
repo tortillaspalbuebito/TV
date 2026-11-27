@@ -578,7 +578,7 @@ sub reproducir(i as integer)
         m.radioInfo.text = c.info
         m.audio.control = "play"
     else
-        if Instr(1, LCase(c.u), ".m3u8") > 0 then contenido.streamFormat = "hls"
+        if Instr(1, LCase(c.u), ".m3u8") > 0 or Instr(1, LCase(c.u), "jmp2.uk/") > 0 then contenido.streamFormat = "hls"
         aplicarAjuste(ajusteDe(c.u))
         m.video.content = contenido
         m.radioBox.visible = false

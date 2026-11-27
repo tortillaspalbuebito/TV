@@ -203,7 +203,7 @@ public class PlayerActivity extends Activity {
         h.removeCallbacksAndMessages("nombre");
         h.postAtTime(() -> nombre.setVisibility(View.GONE), "nombre", android.os.SystemClock.uptimeMillis() + 4000);
         MediaItem.Builder item = new MediaItem.Builder().setUri(url);
-        if (url.toLowerCase().contains(".m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
+        if (url.toLowerCase().contains(".m3u8") || url.contains("jmp2.uk/")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
         player.setMediaItem(item.build());
         player.prepare();
         player.setPlayWhenReady(true);

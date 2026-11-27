@@ -105,6 +105,69 @@ def otras_fuentes(texto_lista):
     return "\n".join(extra)
 
 
+MJH = "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/"
+ESPANOL = re.compile(r"[áéíóúñ¿¡]|\b(en español|espanol|cine|novela|novelas|telenovela|crimen|crimenes|todo|noticias|deportes|azteca|canal|milenio|freetv|peliculas|misterios|naturaleza|amor|corazon|clasicos|historias|investigacion|cocina|viajes|risas|comedia|accion|familia|infantil|niños|latino|mexico|colombia|caso|cerrado|dicho)\b", re.I)
+
+
+def probar(url):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return b"#EXTM3U" in r.read(2048)
+    except Exception:
+        return False
+
+
+def tv_gratis(texto_lista):
+    """Más canales gratis y oficiales (con anuncios) en español: Pluto TV España y EE. UU. 'En Español',
+    Samsung TV Plus España y 'Latino' de EE. UU., y Plex México. Devuelve (lineas m3u, guias xml)."""
+    ya = set(re.findall(r"(?:plu|stvp|plex)-([0-9A-Za-z-]+)", texto_lista))
+    extra, guias, cuenta = [], [], {}
+    def agrega(fuente, reg, cid, v, url, prefijo):
+        if cid in ya or not v.get("name"): return
+        ya.add(cid)
+        grupo = (v.get("group") or "Undefined").replace('"', "")
+        extra.append(f'#EXTINF:-1 tvg-id="{prefijo}{re.sub(r"[^A-Za-z0-9]", "", cid)}.{reg}" tvg-logo="{v.get("logo", "")}" group-title="{grupo}",{v["name"]}')
+        extra.append(url)
+        cuenta[fuente] = cuenta.get(fuente, 0) + 1
+    # Pluto TV
+    try:
+        p = json.loads(get(MJH + "PlutoTV/.channels.json.gz"))["regions"]
+        for reg in ("ar", "es", "us"):
+            for cid, v in p.get(reg, {}).get("channels", {}).items():
+                if reg == "us" and not re.search(r"español|espanol", (v.get("group") or "") + " " + v.get("name", ""), re.I): continue
+                agrega("Pluto " + reg, reg, cid, v, f"https://jmp2.uk/plu-{cid}.m3u8", "Pluto")
+        for reg in ("es", "us"): guias.append(MJH + f"PlutoTV/{reg}.xml.gz")
+    except Exception as e:
+        print("sin Pluto extra", e)
+    # Samsung TV Plus (solo los que no tienen candado DRM)
+    try:
+        sm = json.loads(get(MJH + "SamsungTVPlus/.channels.json.gz"))["regions"]
+        for reg in ("es", "us"):
+            for cid, v in sm.get(reg, {}).get("channels", {}).items():
+                if v.get("license_url"): continue
+                if reg == "us" and (v.get("group") or "") != "Latino": continue
+                agrega("Samsung " + reg, reg, cid, v, f"https://jmp2.uk/stvp-{cid}", "Samsung")
+        for reg in ("es", "us"): guias.append(MJH + f"SamsungTVPlus/{reg}.xml.gz")
+    except Exception as e:
+        print("sin Samsung TV Plus", e)
+    # Plex México (solo si su dirección funciona)
+    try:
+        px = json.loads(get(MJH + "Plex/.channels.json.gz"))["channels"]
+        mx = [(cid, v) for cid, v in px.items() if "mx" in v.get("regions", [])]
+        if mx and probar(f"https://jmp2.uk/plex-{mx[0][0]}"):
+            for cid, v in mx:
+                if ESPANOL.search(v.get("name", "")):
+                    agrega("Plex mx", "mx", cid, v, f"https://jmp2.uk/plex-{cid}", "Plex")
+            guias.append(MJH + "Plex/mx.xml.gz")
+        else:
+            print("Plex: su dirección no funciona, se omite")
+    except Exception as e:
+        print("sin Plex", e)
+    print("TV gratis extra:", cuenta)
+    return "\n".join(extra), guias
+
+
 def quitar_bloqueados(m3u_text, archivo="bloqueados.txt"):
     """Quita los canales cuyos servidores o direcciones están en bloqueados.txt."""
     try:
@@ -534,6 +597,9 @@ def main():
     extra_pluto, guia_pluto = pluto_mx(m3u)
     if extra_pluto:
         m3u = m3u.rstrip() + "\n" + extra_pluto + "\n"
+    extra_fast, guias_fast = tv_gratis(m3u)
+    if extra_fast:
+        m3u = m3u.rstrip() + "\n" + extra_fast + "\n"
     extra_otras = otras_fuentes(m3u)
     if extra_otras:
         m3u = m3u.rstrip() + "\n" + extra_otras + "\n"
@@ -548,6 +614,11 @@ def main():
             print("sin", u, e)
     if guia_pluto:
         blobs.append(gzip.decompress(guia_pluto) if guia_pluto[:2] == b"\x1f\x8b" else guia_pluto)
+    for u in guias_fast:
+        try:
+            blobs.append(get(u)); print("ok ", u)
+        except Exception as e:
+            print("sin", u, e)
     g = build(m3u, blobs)
     urls = stream_urls(m3u)
     g["x"] = caidos(urls)

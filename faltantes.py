@@ -18,7 +18,7 @@ try:
         if x["type"] != "dir": continue
         hijos = json.loads(guia.get(x["url"]))
         listas = [h["name"] for h in hijos if h["name"].endswith((".m3u8", ".m3u"))]
-        print(f"  {x['name']}: {' '.join(listas[:40])}")
+        if x["name"] in QUIERO: print(f"  {x['name']}: {' '.join(h['name'] + ('/' if h['type']=='dir' else '') for h in hijos)[:900]}")
         regiones = QUIERO.get(x["name"], [])
         for h in listas:
             base = h.rsplit(".", 1)[0]

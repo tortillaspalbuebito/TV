@@ -42,6 +42,69 @@ def pluto_mx(texto_lista):
     return "\n".join(extra), blob
 
 
+FREETV = "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"
+TDT = "https://www.tdtchannels.com/lists/tv.m3u8"
+PAIS_NOMBRE = {"argentina": "ar", "chile": "cl", "colombia": "co", "costa rica": "cr", "cuba": "cu", "ecuador": "ec",
+               "el salvador": "sv", "guatemala": "gt", "honduras": "hn", "mexico": "mx", "méxico": "mx", "nicaragua": "ni",
+               "panama": "pa", "panamá": "pa", "paraguay": "py", "peru": "pe", "perú": "pe", "puerto rico": "pr",
+               "dominicana": "do", "dominican republic": "do", "uruguay": "uy", "venezuela": "ve", "bolivia": "bo",
+               "usa": "us", "spain": "es", "españa": "es", "news (es)": "es"}
+OTRO_IDIOMA = re.compile(r"\s(EN|PT|IT|DE|FR|AR|NL|PL|RO|CAT)$|\bGEO\b|Brasil|Catalunya|Euskadi", re.I)
+TDT_GRUPOS = {"Int. América", "Generalistas", "Informativos", "Infantiles", "Deportivos", "Religiosos", "Musicales", "Eventuales"}
+CATEGORIA = {"Informativos": "News", "News (ES)": "News", "Musicales": "Music", "Religiosos": "Religious",
+             "Infantiles": "Kids", "Deportivos": "Sports", "Generalistas": "General"}
+TDT_MUSICA = re.compile(r"España|Chile|México|Costa Rica|Paraguay|Latino|Mundial|Tropical|Molahits|Foxmix|EnerGeek|Verbena|Retro Plus", re.I)
+
+
+def pais_de_texto(t):
+    t = sin_acentos(t)
+    for k, v in PAIS_NOMBRE.items():
+        if sin_acentos(k) in t:
+            return v
+    return ""
+
+
+def otras_fuentes(texto_lista):
+    """Canales gratis y oficiales de Free-TV (listas curadas, sin canales de paga) y TDTChannels."""
+    vistos = {l.strip() for l in texto_lista.splitlines() if l.strip() and not l.startswith("#")}
+    def nombre_clave(n):
+        n = sin_acentos(re.sub(r"\(.*?\)|\[.*?\]|[ⓈⓎⒼ]", " ", n))
+        return re.sub(r"[^a-z0-9]", "", re.sub(r"\b(tv|hd|canal|television)\b", "", n))
+    nombres = {nombre_clave(l.rsplit(",", 1)[-1]) for l in texto_lista.splitlines() if l.startswith("#EXTINF")}
+    extra, cuenta = [], {}
+    for fuente, url in (("Free-TV", FREETV), ("TDT", TDT)):
+        try:
+            txt = get(url).decode("utf-8", "replace").splitlines()
+        except Exception as e:
+            print("sin", fuente, e); continue
+        for i, l in enumerate(txt):
+            if not l.startswith("#EXTINF") or i + 1 >= len(txt): continue
+            u = txt[i + 1].strip()
+            a = dict(re.findall(r'([\w-]+)="([^"]*)"', l))
+            nombre = re.sub(r"\s*[ⓈⓎⒼ]+", "", l.rsplit(",", 1)[-1]).strip()
+            grupo = a.get("group-title", "")
+            if not u.startswith("http") or ".m3u8" not in u or "youtube" in u or u in vistos: continue
+            if nombre_clave(nombre) in nombres or not nombre_clave(nombre): continue
+            if fuente == "Free-TV":
+                pais = pais_de_texto(grupo)
+                if not pais: continue
+            else:
+                if grupo not in TDT_GRUPOS or OTRO_IDIOMA.search(nombre): continue
+                if grupo == "Musicales" and not TDT_MUSICA.search(nombre): continue
+                pais = pais_de_texto(nombre) or ("us" if re.search(r"\bUSA\b", nombre) else "es")
+                if grupo == "Int. América" and not pais_de_texto(nombre) and pais != "us": continue
+                corto = re.sub(r"\s+(España y México|España|México|Colombia|Perú|Ecuador|Chile|Honduras|Nicaragua|Costa Rica|Cuba|Paraguay|USA|SD|HD)$", "", nombre).strip()
+                if len(corto.split()) >= 2: nombre = corto
+            tid = a.get("tvg-id", "")
+            if not re.search(r"\.[a-z]{2}$", tid): tid = re.sub(r"[^A-Za-z0-9]", "", sin_acentos(nombre).title()) + "." + pais
+            cat = CATEGORIA.get(grupo) or ("News" if re.search(r"noticias|news|24h|informa", nombre, re.I) else "General")
+            extra.append(f'#EXTINF:-1 tvg-id="{tid}" tvg-logo="{a.get("tvg-logo", "")}" group-title="{cat}",{nombre}')
+            extra.append(u)
+            vistos.add(u); nombres.add(nombre_clave(nombre)); cuenta[fuente] = cuenta.get(fuente, 0) + 1
+    print("otras fuentes:", cuenta)
+    return "\n".join(extra)
+
+
 def quitar_bloqueados(m3u_text, archivo="bloqueados.txt"):
     """Quita los canales cuyos servidores o direcciones están en bloqueados.txt."""
     try:
@@ -471,6 +534,9 @@ def main():
     extra_pluto, guia_pluto = pluto_mx(m3u)
     if extra_pluto:
         m3u = m3u.rstrip() + "\n" + extra_pluto + "\n"
+    extra_otras = otras_fuentes(m3u)
+    if extra_otras:
+        m3u = m3u.rstrip() + "\n" + extra_otras + "\n"
     m3u = quitar_bloqueados(m3u)
     with open("lista.m3u", "w", encoding="utf-8") as f:
         f.write(m3u)

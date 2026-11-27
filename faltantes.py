@@ -7,13 +7,25 @@ sys.path.insert(0, ".")
 import guia
 
 FUENTES = []
-for reg in ["mx", "ar", "cl", "co", "pe", "es", "us", "br", "latam", "all"]:
-    FUENTES.append((f"Pluto {reg}", f"https://i.mjh.nz/PlutoTV/{reg}.m3u8"))
-for reg in ["mx", "es", "us", "br", "all"]:
-    FUENTES.append((f"Samsung {reg}", f"https://i.mjh.nz/SamsungTVPlus/{reg}.m3u8"))
-for reg in ["mx", "es", "us", "all"]:
-    FUENTES.append((f"Plex {reg}", f"https://i.mjh.nz/Plex/{reg}.m3u8"))
-FUENTES.append(("Roku", "https://i.mjh.nz/Roku/all.m3u8"))
+RAW = "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/"
+QUIERO = {"PlutoTV": ["mx", "ar", "cl", "co", "pe", "es", "us", "latam", "all"],
+          "SamsungTVPlus": ["mx", "es", "us", "all"], "Plex": ["mx", "es", "us", "all"],
+          "Roku": ["all"], "Stirr": ["all"], "Distro": ["all"], "Tubi": ["all"], "LGChannels": ["mx", "es", "all"]}
+try:
+    raiz = json.loads(guia.get("https://api.github.com/repos/matthuisman/i.mjh.nz/contents/"))
+    print("Carpetas:", " ".join(x["name"] for x in raiz if x["type"] == "dir"))
+    for x in raiz:
+        if x["type"] != "dir": continue
+        hijos = json.loads(guia.get(x["url"]))
+        listas = [h["name"] for h in hijos if h["name"].endswith((".m3u8", ".m3u"))]
+        print(f"  {x['name']}: {' '.join(listas[:40])}")
+        regiones = QUIERO.get(x["name"], [])
+        for h in listas:
+            base = h.rsplit(".", 1)[0]
+            if base in regiones or base.split("_")[0] in regiones:
+                FUENTES.append((f"{x['name']} {base}", RAW + x["name"] + "/" + h))
+except Exception as e:
+    print("No se pudo leer el catálogo:", e)
 FUENTES.append(("Free-TV", "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"))
 FUENTES.append(("TDTChannels", "https://www.tdtchannels.com/lists/tv.m3u8"))
 
@@ -60,7 +72,7 @@ for nombre, url in FUENTES:
         cs = parse(guia.get(url).decode("utf-8", "replace"))
     except Exception as e:
         print(f"[{nombre}] no disponible ({e})"); continue
-    esp = [c for c in cs if nombre.startswith(("Pluto mx", "Pluto ar", "Pluto cl", "Pluto co", "Pluto pe", "Pluto es", "Pluto latam", "Samsung mx", "Samsung es", "Plex mx", "Plex es", "TDT"))
+    esp = [c for c in cs if re.search(r"\b(mx|ar|cl|co|pe|es|latam)\b", nombre) or nombre.startswith("TDT")
            or ESP.search(c["grp"] + " " + c["lang"] + " " + c["name"])]
     nuevos = [c for c in esp if clave(c["name"]) not in tengo and c["url"] not in tengo_url and clave(c["name"])]
     print(f"[{nombre}] {len(cs)} canales, {len(esp)} en español, {len(nuevos)} no están")

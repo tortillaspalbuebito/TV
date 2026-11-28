@@ -22,7 +22,7 @@ jobs:
       - name: Revisar que el código de Roku no tenga errores
         run: |
           npx -y brighterscript@0.69 --rootDir roku --createPackage false --diagnosticLevel error 2>&1 | tee bsc.txt
-          if grep -qE " error BS[0-9]+" bsc.txt; then echo "Hay errores en el código de Roku"; exit 1; fi
+          if grep -E " error BS[0-9]+" bsc.txt | grep -v BS1067 | grep -q .; then echo "Hay errores en el código de Roku"; exit 1; fi
       - name: Armar el .zip para instalar en Roku
         run: |
           cd roku

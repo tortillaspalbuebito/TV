@@ -16,6 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Revisar que el código de Roku no tenga errores
+        run: |
+          npx -y brighterscript@0.69 --rootDir roku --createPackage false --diagnosticLevel error 2>&1 | tee bsc.txt
+          if grep -qE " error BS[0-9]+" bsc.txt; then echo "Hay errores en el código de Roku"; exit 1; fi
       - name: Armar el .zip para instalar en Roku
         run: |
           cd roku

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Revisa desde el internet de este Roku qué canales de verdad mandan video:
+     lista -> calidad -> primer pedazo de video. Devuelve los que no abren. -->
+<component name="RevisarTask" extends="Task">
+  <interface>
+    <field id="urls" type="array" />
+    <field id="progreso" type="string" />
+    <field id="malos" type="array" />
+  </interface>
+  <script type="text/brightscript"><![CDATA[
+sub init()
+    m.top.functionName = "revisar"
+end sub
+
+function nuevo(url as string, port as object) as object
+    t = CreateObject("roUrlTransfer")
+    t.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    t.InitClientCertificates()
+    t.SetMessagePort(port)
+    t.SetUrl(url)
+    t.AddHeader("User-Agent", "Mozilla/5.0 (Roku) TeleLibre")
+    t.RetainBodyOnError(true)
+    return t
+end function
+
+function resolver(base as string, rel as string) as string
+    rel = rel.Trim()
+    if LCase(Left(rel, 7)) = "http://" or LCase(Left(rel, 8)) = "https://" then return rel
+    p = Instr(1, base, "//")
+    if Left(rel, 2) = "//" then return Left(base, p - 1) + rel
+    q = Instr(1, base, "?")
+    if q > 0 then base = Left(base, q - 1)
+    if Left(rel, 1) = "/"
+        r = Instr(p + 2, base, "/")
+        if r = 0 then return base + rel
+        return Left(base, r - 1) + rel
+    end if
+    i = Len(base)
+    while i > 0 and Mid(base, i, 1) <> "/"
+        i = i - 1
+    end while
+    return Left(base, i) + rel
+end function
+
+' Dirección final después de las redirecciones (para armar bien las direcciones relativas)
+function finalDe(url as string, ev as object) as string
+    u = url
+    hs = ev.GetResponseHeadersArray()
+    if hs <> invalid
+        for each h in hs
+            for each k in h
+                if LCase(k) = "location" then u = resolver(u, h[k])
+            end for
+        end for
+    end if
+    return u
+end function
+
+function primeraDireccion(txt as string, desde as string) as string
+    if desde <> ""
+        p = Instr(1, txt, desde)
+        if p > 0 then txt = Mid(txt, p)
+    end if
+    for each l in txt.Split(Chr(10))
+        l = l.Trim()
+        if l <> "" and Left(l, 1) <> "#" then return l
+    end for
+    return ""
+end function
+
+sub revisar()
+    urls = m.top.urls
+    if urls = invalid then urls = []
+    port = CreateObject("roMessagePort")
+    activos = {}
+    malos = []
+    total = urls.Count()
+    sig = 0
+    hechos = 0
+    reloj = CreateObject("roTimespan")
+    while hechos < total
+        while activos.Count() < 6 and sig < total
+            if not pedir(urls[sig], urls[sig], 1, port, activos, reloj)
+                hechos = hechos + 1
+                malos.Push(urls[sig])
+            end if
+            sig = sig + 1
+        end while
+        msg = wait(2000, port)
+        if type(msg) = "roUrlEvent" and msg.GetInt() = 1
+            id = msg.GetSourceIdentity().ToStr()
+            a = activos[id]
+            if a <> invalid
+                activos.Delete(id)
+                code = msg.GetResponseCode()
+                txt = msg.GetString()
+                listo = true
+                bien = false
+                if a.paso = 3
+                    bien = (code = 200 or code = 206)
+                else if (code = 200 or code = 206) and Instr(1, txt, "#EXTM3U") > 0
+                    base = finalDe(a.url, msg)
+                    if a.paso = 1 and Instr(1, txt, "#EXT-X-STREAM-INF") > 0
+                        v = primeraDireccion(txt, "#EXT-X-STREAM-INF")
+                        if v <> ""
+                            if pedir(a.canal, resolver(base, v), 2, port, activos, reloj) then listo = false
+                        end if
+                    else
+                        s = primeraDireccion(txt, "")
+                        if s <> ""
+                            if pedir(a.canal, resolver(base, s), 3, port, activos, reloj) then listo = false
+                        end if
+                    end if
+                else if code = 200 and a.paso = 1 and LCase(Right(a.canal, 5)) <> ".m3u8" and Instr(1, a.canal, "jmp2.uk") = 0
+                    bien = true ' no es una lista HLS: si responde, se da por buena
+                end if
+                if listo
+                    hechos = hechos + 1
+                    if not bien then malos.Push(a.canal)
+                end if
+            end if
+        end if
+        ' Lo que tarde más de 20 segundos no respondió
+        ahora = reloj.TotalMilliseconds()
+        for each id in activos.Keys()
+            a = activos[id]
+            if ahora - a.inicio > 20000
+                a.t.AsyncCancel()
+                activos.Delete(id)
+                hechos = hechos + 1
+                malos.Push(a.canal)
+            end if
+        end for
+        if hechos mod 25 = 0 and hechos > 0 then m.top.progreso = hechos.ToStr() + " de " + total.ToStr()
+    end while
+    m.top.malos = malos
+end sub
+
+function pedir(canal as string, url as string, paso as integer, port as object, activos as object, reloj as object) as boolean
+    t = nuevo(url, port)
+    if paso = 3 then t.AddHeader("Range", "bytes=0-2047")
+    if not t.AsyncGetToString() then return false
+    activos[t.GetIdentity().ToStr()] = { t: t, canal: canal, url: url, paso: paso, inicio: reloj.TotalMilliseconds() }
+    return true
+end function
+]]></script>
+</component>

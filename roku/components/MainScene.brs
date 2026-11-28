@@ -36,6 +36,7 @@ sub init()
     m.reg = CreateObject("roRegistrySection", "telelibre")
     m.favs = leerMapa("favs")
     m.ocultos = leerMapa("ocultos")
+    m.noAbren = leerMapa("noabren")
     m.ajustes = {}
     t = m.reg.Read("ajustes")
     if t <> ""
@@ -46,7 +47,13 @@ sub init()
     t = m.reg.Read("fallos")
     if t <> ""
         f = ParseJson(t)
-        if f <> invalid then m.fallosReg = f
+        if f <> invalid
+            ' solo los fallos de las últimas 24 horas (para no llenar la memoria del Roku)
+            ahora = CreateObject("roDateTime").AsSeconds()
+            for each u in f
+                if ahora - f[u] < 86400 then m.fallosReg[u] = f[u]
+            end for
+        end if
     end if
 
     m.canales = []
@@ -59,6 +66,8 @@ sub init()
     m.fallos = 0
     m.armando = false
     m.viendo = false
+    m.revisando = false
+    m.revisarManual = false
     m.visto = false
     m.reint = 0
     m.radios = []
@@ -162,6 +171,80 @@ sub guardarMapa(clave as string, mapa as object)
     m.reg.Flush()
 end sub
 
+' Huella corta de una dirección (para guardar muchas sin llenar la memoria del Roku)
+function huella(u as string) as string
+    ba = CreateObject("roByteArray")
+    ba.FromAsciiString(u)
+    d = CreateObject("roEVPDigest")
+    d.Setup("md5")
+    return Left(d.Process(ba), 10)
+end function
+
+function noAbre(c as object) as boolean
+    if c = invalid or esRadio(c) or c.h = invalid then return false
+    return m.noAbren.DoesExist(c.h)
+end function
+
+' ---------- Revisar desde el internet de este Roku qué canales abren ----------
+sub revisarSiToca()
+    ultima = m.reg.Read("revisadoEn")
+    if ultima <> "" and ahoraSeg() - ultima.ToInt() < 72000 then return
+    revisarCanales(false)
+end sub
+
+sub revisarCanales(manual as boolean)
+    if m.revisando
+        if manual then mostrarOsd("Ya se están revisando los canales", "Te aviso cuando termine")
+        return
+    end if
+    urls = []
+    for each c in m.canales
+        urls.Push(c.u)
+    end for
+    if urls.Count() = 0 then return
+    m.revisando = true
+    m.revisarManual = manual
+    m.revision = CreateObject("roSGNode", "RevisarTask")
+    m.revision.urls = urls
+    m.revision.ObserveField("malos", "alRevisar")
+    m.revision.control = "RUN"
+    if manual then mostrarOsd("Revisando todos los canales", "Tarda unos minutos. Puedes seguir viendo la tele.")
+end sub
+
+sub alRevisar()
+    try
+        alRevisarSeguro()
+    catch e
+        anotarError("alRevisar", e)
+    end try
+end sub
+
+sub alRevisarSeguro()
+    m.revisando = false
+    malos = m.revision.malos
+    if malos = invalid then return
+    m.noAbren = {}
+    for each u in malos
+        m.noAbren[huella(u)] = true
+    end for
+    ' si sale casi todo mal, seguramente falló el internet: no se marca nada
+    if malos.Count() > m.canales.Count() * 0.8
+        m.noAbren = leerMapa("noabren")
+        if m.revisarManual then mostrarOsd("No se pudo revisar", "Parece que falló el internet. Intenta más tarde.")
+        return
+    end if
+    guardarMapa("noabren", m.noAbren)
+    m.reg.Write("revisadoEn", ahoraSeg().ToStr())
+    m.reg.Flush()
+    if not m.viendo
+        armarCategorias()
+        if m.catActual <> "guia" then filtrar(m.catActual)
+    end if
+    if m.revisarManual or not m.viendo
+        mostrarOsd("Canales revisados", malos.Count().ToStr() + " no abren desde este Roku. Quedaron en la categoría No abren aquí.")
+    end if
+end sub
+
 function esRadio(c as object) as boolean
     return c <> invalid and c.DoesExist("radio")
 end function
@@ -200,6 +283,9 @@ sub alCargarSeguro()
     m.datos = m.tarea.resultado
     if m.datos = invalid or m.datos.c = invalid then return
     m.canales = m.datos.c
+    for each c in m.canales
+        c.h = huella(c.u)
+    end for
     errorPrevio = m.reg.Read("ultimoError")
 
     if m.datos.r <> invalid
@@ -216,6 +302,7 @@ sub alCargarSeguro()
     m.lista.visible = true
     armarCategorias()
     filtrar("todo")
+    revisarSiToca()
 
     ' Canal mandado desde el celular al abrir la app
     if m.pendiente <> invalid
@@ -273,7 +360,7 @@ sub armarCategorias()
     for each g in m.datos.grupos
         n = 0
         for each c in m.canales
-            if not m.ocultos.DoesExist(c.u) and enGrupo(c, g[0]) then n = n + 1
+            if not m.ocultos.DoesExist(c.u) and not noAbre(c) and enGrupo(c, g[0]) then n = n + 1
         end for
         if n > 0 then m.grupos.Push({ k: g[0], t: g[1] + "  (" + n.ToStr() + ")" })
     end for
@@ -282,6 +369,11 @@ sub armarCategorias()
         n = n + 1
     end for
     if n > 0 then m.grupos.Push({ k: "ocultos", t: "Canales ocultos  (" + n.ToStr() + ")" })
+    n = 0
+    for each c in m.canales
+        if noAbre(c) and not m.ocultos.DoesExist(c.u) then n = n + 1
+    end for
+    if n > 0 then m.grupos.Push({ k: "noabren", t: "No abren aquí  (" + n.ToStr() + ")" })
     cont = CreateObject("roSGNode", "ContentNode")
     foco = 0
     for i = 0 to m.grupos.Count() - 1
@@ -362,15 +454,19 @@ sub filtrar(k as string)
             entra = oculto
         else if oculto
             entra = false
-        else if k = "todo"
-            entra = true
+        else if k = "noabren"
+            entra = noAbre(c)
         else if k = "fav"
             entra = m.favs.DoesExist(c.u)
+        else if noAbre(c)
+            entra = false
+        else if k = "todo"
+            entra = true
         else
             entra = enGrupo(c, k)
         end if
         if entra
-            if falloReciente(c) then malos.Push(c) else buenos.Push(c)
+            if falloReciente(c) or (k = "fav" and noAbre(c)) then malos.Push(c) else buenos.Push(c)
         end if
     end for
     buenos.Append(malos)
@@ -442,6 +538,7 @@ function textoAhora(c as object) as string
     if esRadio(c) then return "Radio · " + c.info
     t = programaAhora(c)
     if t <> "" then return "Ahora: " + t
+    if noAbre(c) then return "No abrió en la revisión desde este Roku"
     if falloReciente(c) then return "No abrió la última vez"
     return ""
 end function
@@ -635,6 +732,11 @@ sub alCambiarEstadoVideoSeguro()
         m.fallos = 0
         m.visto = true
         m.reint = 0
+        hc = huella(m.curUrl)
+        if m.noAbren.DoesExist(hc)
+            m.noAbren.Delete(hc)
+            guardarMapa("noabren", m.noAbren)
+        end if
         if m.fallosReg.DoesExist(m.curUrl)
             m.fallosReg.Delete(m.curUrl)
             m.reg.Write("fallos", FormatJson(m.fallosReg))
@@ -867,6 +969,7 @@ sub abrirOpciones(c as object)
             agregarOpcion(cont, "cc", "Activar subtítulos (si el canal los trae)")
         end if
     end if
+    agregarOpcion(cont, "revisar", "Revisar todos los canales desde este Roku")
     agregarOpcion(cont, "cancelar", "Cancelar")
     m.opcTitulo.text = c.n + "   " + c.t
     m.opcLista.content = cont
@@ -938,6 +1041,9 @@ sub alElegirOpcionSeguro()
         end if
         m.reg.Flush()
         cerrarOpciones()
+    else if accion = "revisar"
+        cerrarOpciones()
+        revisarCanales(true)
     else if accion = "ocultar"
         ocultarCanal(c)
     else if accion = "mostrar"

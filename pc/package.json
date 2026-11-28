@@ -12,7 +12,7 @@
   "build": {
     "appId": "com.telelibre.pc",
     "productName": "Tele Libre",
-    "files": ["main.js", "app/**"],
+    "files": ["main.js", "preload.js", "app/**"],
     "icon": "app/icon-512.png",
     "win": { "target": ["nsis", "portable"] },
     "nsis": { "oneClick": true, "createDesktopShortcut": true, "shortcutName": "Tele Libre" },

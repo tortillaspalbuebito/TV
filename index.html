@@ -233,7 +233,7 @@ video{object-fit:contain}
 const DEMO=window.TL_DEMO||null;
 const APP=!!window.TL_APP; // true dentro del APK
 const LN=window.Capacitor?.Plugins?.LocalNotifications||null;
-const PANT=window.Capacitor?.Plugins?.Pantalla||null,AppP=window.Capacitor?.Plugins?.App||null;
+const PANT=window.Capacitor?.Plugins?.Pantalla||null,PRUEBA=PANT||window.TLPC||null,AppP=window.Capacitor?.Plugins?.App||null;
 // Lista armada en el repositorio (español + canales latinos); si no hay, la de iptv-org.
 const RESPALDO='https://iptv-org.github.io/iptv/languages/spa.m3u';
 const DEF=window.TL_REPO?`https://raw.githubusercontent.com/${window.TL_REPO}/main/lista.m3u`:RESPALDO;
@@ -862,20 +862,20 @@ pintaVersion();
 /* ---------- Revisar canales desde el celular ---------- */
 let revisando=false;
 async function revisarAqui(manual){
-  if(!PANT?.probar||revisando||!all.length)return;
+  if(!PRUEBA?.probar||revisando||!all.length)return;
   if(!manual&&Date.now()-ls.get('aquiFecha',0)<20*36e5)return;
   revisando=true;$('aquiBtn').disabled=true;
   const urls=[...new Set(all.map(c=>c.url))],T=urls.length;let ok=0,mal=0;
   for(let i=0;i<T;i+=120){
     $('aquiTxt').textContent=`Revisando ${Math.min(i+120,T)} de ${T}…`;
-    try{const r=await PANT.probar({urls:urls.slice(i,i+120)});const t=Date.now();
+    try{const r=await PRUEBA.probar({urls:urls.slice(i,i+120)});const t=Date.now();
       (r.ok||[]).forEach(u=>{aqui[u]=[1,t];ok++});(r.mal||[]).forEach(u=>{aqui[u]=[0,t];mal++});}catch(e){}
   }
   ls.set('aqui',aqui);ls.set('aquiFecha',Date.now());revisando=false;$('aquiBtn').disabled=false;
   $('aquiTxt').textContent=`Listo: ${ok} señales funcionan desde tu internet y ${mal} ${mal===1?'no respondió':'no respondieron'}. Se vuelve a revisar sola cada día.`;
   all.forEach(c=>delete c._g);loadGuia();
 }
-if(PANT?.probar){$('aquiBox').hidden=false;const f=ls.get('aquiFecha',0);$('aquiTxt').textContent=f?`Última revisión: ${new Date(f).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}.`:'Prueba cada canal desde tu internet, para mostrar solo los que de verdad abren.'}
+if(PRUEBA?.probar){$('aquiBox').hidden=false;if(window.TL_PC)$('aquiBtn').textContent='Revisar canales desde esta PC';const f=ls.get('aquiFecha',0);$('aquiTxt').textContent=f?`Última revisión: ${new Date(f).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}.`:'Prueba cada canal desde tu internet, para mostrar solo los que de verdad abren.'}
 $('aquiBtn').onclick=()=>revisarAqui(true);
 
 /* ---------- Subtítulos ---------- */

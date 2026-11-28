@@ -1,0 +1,11 @@
+name: Probar señales
+on:
+  workflow_dispatch:
+    inputs:
+      urls: { description: "Direcciones separadas por espacio", required: true }
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 probar.py ${{ inputs.urls }}

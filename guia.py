@@ -123,8 +123,22 @@ def tv_gratis(texto_lista):
     Samsung TV Plus España y 'Latino' de EE. UU., y Plex México. Devuelve (lineas m3u, guias xml)."""
     ya = set(re.findall(r"(?:plu|stvp|plex)-([0-9A-Za-z-]+)", texto_lista))
     extra, guias, cuenta = [], [], {}
+    def clave(n):
+        n = sin_acentos(re.sub(r"\(.*?\)|\[.*?\]", " ", n or ""))
+        n = re.sub(r"\b(pluto tv|de pluto tv|en pluto tv|en espanol|tv|hd|canal)\b", " ", n)
+        return re.sub(r"[^a-z0-9]", "", n)
+    # nombres de canales que ya hay en español latino (todo lo que no es de España)
+    latinos = {clave(l.rsplit(",", 1)[-1]) for l in texto_lista.splitlines()
+               if l.startswith("#EXTINF") and not re.search(r'tvg-id="[^"]*\.es"', l)}
+    quitados = [0]
     def agrega(fuente, reg, cid, v, url, prefijo):
         if cid in ya or not v.get("name"): return
+        if reg == "es":
+            if clave(v["name"]) in latinos:  # ya está en versión latina: no se agrega la de España
+                quitados[0] += 1; return
+            v = dict(v, name=v["name"] + " (España)")
+        else:
+            latinos.add(clave(v["name"]))
         ya.add(cid)
         grupo = (v.get("group") or "Undefined").replace('"', "")
         extra.append(f'#EXTINF:-1 tvg-id="{prefijo}{re.sub(r"[^A-Za-z0-9]", "", cid)}.{reg}" tvg-logo="{v.get("logo", "")}" group-title="{grupo}",{v["name"]}')
@@ -133,7 +147,7 @@ def tv_gratis(texto_lista):
     # Pluto TV
     try:
         p = json.loads(get(MJH + "PlutoTV/.channels.json.gz"))["regions"]
-        for reg in ("ar", "es", "us"):
+        for reg in ("ar", "us", "es"):
             for cid, v in p.get(reg, {}).get("channels", {}).items():
                 if reg == "us" and not re.search(r"español|espanol", (v.get("group") or "") + " " + v.get("name", ""), re.I): continue
                 agrega("Pluto " + reg, reg, cid, v, f"https://jmp2.uk/plu-{cid}.m3u8", "Pluto")
@@ -143,7 +157,7 @@ def tv_gratis(texto_lista):
     # Samsung TV Plus (solo los que no tienen candado DRM)
     try:
         sm = json.loads(get(MJH + "SamsungTVPlus/.channels.json.gz"))["regions"]
-        for reg in ("es", "us"):
+        for reg in ("us", "es"):
             for cid, v in sm.get(reg, {}).get("channels", {}).items():
                 if v.get("license_url"): continue
                 if reg == "us" and (v.get("group") or "") != "Latino": continue
@@ -164,7 +178,7 @@ def tv_gratis(texto_lista):
             print("Plex: su dirección no funciona, se omite")
     except Exception as e:
         print("sin Plex", e)
-    print("TV gratis extra:", cuenta)
+    print("TV gratis extra:", cuenta, "· de España omitidos por tener versión latina:", quitados[0])
     return "\n".join(extra), guias
 
 

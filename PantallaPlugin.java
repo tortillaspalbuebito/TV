@@ -126,6 +126,7 @@ public class PantallaPlugin extends Plugin {
         i.putExtra("favs", fv);
         int indice = call.getInt("indice", 0);
         i.putExtra("indice", indice);
+        i.putExtra("cc", Boolean.TRUE.equals(call.getBoolean("cc", false)));
         getActivity().startActivity(i);
         call.resolve();
     }

@@ -114,6 +114,7 @@ button,select,input{font:inherit;font-size:16px;color:var(--ink)}
 body.fs{overflow:hidden}body.fs .player{position:fixed;inset:0;z-index:50;border-radius:0;margin:0;aspect-ratio:auto}
 video{object-fit:contain}
 @media(prefers-reduced-motion:reduce){.osd{transition:none}}
+video.sinCC::-webkit-media-text-track-container{display:none!important}video.sinCC::cue{color:transparent!important;background:transparent!important}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 </head>
@@ -447,7 +448,7 @@ function abrirNativo(ch){
   if(!PANT?.reproducir||!ch)return;probadoNativo.add(ch.url);
   let lista=view.includes(ch)?view:[ch,...view];const i=lista.indexOf(ch),a=Math.max(0,i-300);
   lista=lista.slice(a,i+300);
-  PANT.reproducir({lista:lista.map(c=>({url:c.url,nombre:(c.num?c.num+'  ':'')+c.name,fav:favs.has(c.url)})),indice:i-a}).catch(()=>{});
+  PANT.reproducir({lista:lista.map(c=>({url:c.url,nombre:(c.num?c.num+'  ':'')+c.name,fav:favs.has(c.url)})),indice:i-a,cc:subOn}).catch(()=>{});
   marcaNativo(ch.url,true);msg(`${ch.name} se está viendo en el reproductor de Android.`,true,true);setLast(ch.url);
   recent=[ch.url,...recent.filter(u=>u!==ch.url)].slice(0,10);ls.set('recent',recent);renderRecent();
 }
@@ -881,11 +882,11 @@ $('aquiBtn').onclick=()=>revisarAqui(true);
 /* ---------- Subtítulos ---------- */
 let subOn=ls.get('cc',false);
 function aplicaCC(){
-  $('ccBtn').classList.toggle('on',subOn);
-  try{for(const t of v.textTracks)t.mode=subOn?'showing':'hidden'}catch(e){}
+  $('ccBtn').classList.toggle('on',subOn);v.classList.toggle('sinCC',!subOn);
+  try{for(const t of v.textTracks){const m=subOn?'showing':'disabled';if(t.mode!==m)t.mode=m}}catch(e){}
   if(hls){try{hls.subtitleDisplay=subOn;if(subOn&&hls.subtitleTracks?.length&&hls.subtitleTrack<0)hls.subtitleTrack=0}catch(e){}}
 }
-try{v.textTracks.addEventListener('addtrack',aplicaCC)}catch(e){}
+try{v.textTracks.addEventListener('addtrack',aplicaCC);v.textTracks.addEventListener('change',()=>{if(!subOn)aplicaCC()})}catch(e){}
 $('ccBtn').onclick=()=>{subOn=!subOn;ls.set('cc',subOn);aplicaCC();
   const hay=(v.textTracks&&v.textTracks.length)||(hls?.subtitleTracks?.length);
   $('osdN').textContent=subOn?'Subtítulos activados':'Subtítulos desactivados';$('osdP').textContent=subOn&&!hay?'Este canal no trae subtítulos ahora':'';

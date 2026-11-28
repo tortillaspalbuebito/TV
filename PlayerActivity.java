@@ -38,7 +38,8 @@ public class PlayerActivity extends Activity {
     private ArrayList<String> nombres = new ArrayList<>();
     private int pos = 0, fallos = 0, reint = 0;
     private boolean visto = false;
-    private TextView nombre, aviso, btnAnt, btnSig, btnFav, btnAjuste;
+    private TextView nombre, aviso, btnAnt, btnSig, btnFav, btnAjuste, btnCC;
+    private boolean cc = false;
     private PlayerView vistaVideo;
     private boolean[] favs;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -98,6 +99,17 @@ public class PlayerActivity extends Activity {
         lj.setMargins(0, 30, 190, 0);
         raiz.addView(btnAjuste, lj);
         btnAjuste.setOnClickListener(v -> cambiarAjuste());
+        cc = getIntent().getBooleanExtra("cc", false);
+        btnCC = boton("CC");
+        btnCC.setTextSize(18);
+        FrameLayout.LayoutParams lc = new FrameLayout.LayoutParams(140, 140, Gravity.TOP | Gravity.END);
+        lc.setMargins(0, 30, 350, 0);
+        raiz.addView(btnCC, lc);
+        btnCC.setOnClickListener(v -> {
+            cc = !cc;
+            aplicarCC();
+            mostrarAviso(cc ? "Subtítulos activados (si el canal los trae)" : "Subtítulos desactivados");
+        });
         btnAnt.setOnClickListener(v -> cambiar(-1));
         btnSig.setOnClickListener(v -> cambiar(1));
         vista.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) vis -> {
@@ -105,6 +117,7 @@ public class PlayerActivity extends Activity {
             btnSig.setVisibility(vis);
             btnFav.setVisibility(vis);
             btnAjuste.setVisibility(vis);
+            btnCC.setVisibility(vis);
         });
         setContentView(raiz);
 
@@ -117,7 +130,8 @@ public class PlayerActivity extends Activity {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
                 .build();
         vista.setPlayer(player);
-        vista.setShowSubtitleButton(true);
+        vista.setShowSubtitleButton(false);
+        aplicarCC();
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
@@ -218,6 +232,20 @@ public class PlayerActivity extends Activity {
         int a = ajusteActual();
         vistaVideo.setResizeMode(a == 1 ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 : a == 2 ? AspectRatioFrameLayout.RESIZE_MODE_FILL : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    }
+
+    /** Prende o apaga los subtítulos de verdad (también los que vienen metidos en la señal). */
+    private void aplicarCC() {
+        if (player == null) return;
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, !cc)
+                .setPreferredTextLanguage(cc ? "es" : null)
+                .setSelectUndeterminedTextLanguage(cc)
+                .setIgnoredTextSelectionFlags(cc ? 0 : androidx.media3.common.C.SELECTION_FLAG_FORCED | androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+                .build());
+        if (vistaVideo != null && vistaVideo.getSubtitleView() != null)
+            vistaVideo.getSubtitleView().setVisibility(cc ? View.VISIBLE : View.GONE);
+        if (btnCC != null) btnCC.setAlpha(cc ? 1f : 0.45f);
     }
 
     private void cambiarAjuste() {

@@ -137,7 +137,7 @@ def tv_gratis(texto_lista):
             if clave(v["name"]) in latinos:  # ya está en versión latina: no se agrega la de España
                 quitados[0] += 1; return
             v = dict(v, name=v["name"] + " (España)")
-        else:
+        elif not fuente.startswith("Samsung"):  # Samsung EE. UU. falla seguido desde México: no cuenta como versión latina
             latinos.add(clave(v["name"]))
         ya.add(cid)
         grupo = (v.get("group") or "Undefined").replace('"', "")

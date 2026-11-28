@@ -185,13 +185,14 @@ public class PantallaPlugin extends Plugin {
         }).start();
     }
 
-    private static boolean responde(String u) {
+    /** Descarga el inicio de una dirección siguiendo redirecciones. Devuelve {urlFinal, texto} o null. */
+    private static String[] bajar(String u, int max) {
         HttpURLConnection c = null;
         try {
-            for (int saltos = 0; saltos < 4; saltos++) {
+            for (int saltos = 0; saltos < 5; saltos++) {
                 c = (HttpURLConnection) new URL(u).openConnection();
                 c.setConnectTimeout(8000);
-                c.setReadTimeout(8000);
+                c.setReadTimeout(10000);
                 c.setInstanceFollowRedirects(false);
                 c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) TeleLibre");
                 int code = c.getResponseCode();
@@ -200,20 +201,49 @@ public class PantallaPlugin extends Plugin {
                     c.disconnect();
                     continue;
                 }
-                if (code >= 400) return false;
+                if (code >= 400) return null;
                 InputStream in = c.getInputStream();
-                byte[] buf = new byte[2048];
-                int n = in.read(buf);
+                java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                while (o.size() < max && (n = in.read(buf)) > 0) o.write(buf, 0, n);
                 in.close();
-                if (n <= 0) return false;
-                String head = new String(buf, 0, n, "UTF-8");
-                return head.contains("#EXTM3U") || !u.toLowerCase().split("\\?")[0].endsWith(".m3u8");
+                if (o.size() == 0) return null;
+                return new String[]{u, o.toString("ISO-8859-1")};
             }
-            return false;
+            return null;
         } catch (Exception e) {
-            return false;
+            return null;
         } finally {
             if (c != null) c.disconnect();
+        }
+    }
+
+    private static String primeraLinea(String base, String texto) throws Exception {
+        for (String l : texto.split("\r?\n")) {
+            l = l.trim();
+            if (!l.isEmpty() && !l.startsWith("#")) return new URL(new URL(base), l).toString();
+        }
+        return null;
+    }
+
+    /** Un canal "funciona" solo si de verdad llega video: lista → calidad → primer pedazo de video. */
+    private static boolean responde(String u) {
+        try {
+            String[] r = bajar(u, 300000);
+            if (r == null) return false;
+            if (!r[1].contains("#EXTM3U")) return !u.toLowerCase().split("\\?")[0].endsWith(".m3u8");
+            if (r[1].contains("#EXT-X-STREAM-INF")) {
+                String v = primeraLinea(r[0], r[1].substring(r[1].indexOf("#EXT-X-STREAM-INF")));
+                if (v == null) return false;
+                r = bajar(v, 300000);
+                if (r == null || !r[1].contains("#EXTM3U")) return false;
+            }
+            String seg = primeraLinea(r[0], r[1]);
+            if (seg == null) return false;
+            return bajar(seg, 1024) != null;
+        } catch (Exception e) {
+            return false;
         }
     }
 
